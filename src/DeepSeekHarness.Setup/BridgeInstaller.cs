@@ -218,13 +218,18 @@ namespace DeepSeekHarness.Setup
                        "[]\n";
             }
 
+            // An earlier version forced `- id: approval / policy: never` here, on the
+            // assumption that a patched session has no interactive answerer and would
+            // therefore fail closed. That assumption was wrong: the terminal UI composes its
+            // own approval answerer (ApprovalPanel, with the on-screen hint "approval channel
+            // mounted: commands requesting sandbox_permissions raise an approval bar"). The
+            // override did not protect anything - it silently disabled a protection the user
+            // had explicitly turned on, so elevation requests were denied with no prompt.
+            //
+            // The extension now leaves the approval policy alone. That is also the right
+            // default for a plugin: the hook answers file edits, and everything else keeps
+            // whatever policy the user configured.
             return header +
-                   "\n" +
-                   "# No interactive answerer is composed in a patched session by default, so an\n" +
-                   "# approval prompt would fail closed and block every edit. The hook is the gate.\n" +
-                   "- id: approval\n" +
-                   "  config:\n" +
-                   "    policy: never\n" +
                    "\n" +
                    "- insert:\n" +
                    "    - id: hooks-vs-bridge\n" +
