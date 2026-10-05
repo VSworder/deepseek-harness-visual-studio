@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.1
+
+Behaviour is unchanged from 0.2.0. Three things in the manifest were wrong, and all three
+show up in Visual Studio's own Extensions Manager rather than only on a web page.
+
+- **`MoreInfo` pointed at `https://github.com/`** &#8212; the site root, not this repository.
+- **The description still named the removal command by its old name** and said it had to be
+  run before uninstalling. Neither is true since the cleanup became optional: uninstalling
+  already removes every capability, because without Visual Studio there is no bridge and no
+  diff window.
+- **`Preview` is now true**, so the Marketplace shows a preview badge. The checkbox on the
+  publisher portal only applies to extensions listed by link rather than uploaded as a
+  VSIX, which is why it could not be ticked there. The version is below 1.0 and everything
+  has been verified on one machine, so the badge is accurate.
+
+The description had to be shortened to fit: the schema caps it at 1000 characters **after
+entity decoding**, and the first attempt at these edits came to 1142 and failed validation
+with `VSSDK1062`. It is 879 now.
+
 ## 0.2.0
 
 The gate is now a DeepSeek Harness plugin in its own right, not only a part of the extension.
