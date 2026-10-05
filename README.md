@@ -1,18 +1,25 @@
 # DeepSeek Harness for Visual Studio
 
-Bring **DeepSeek Harness** into Visual Studio:
+Bring **DeepSeek Harness** (dsh) into Visual Studio:
 
 - **Native diff gate.** When the agent wants to change a file, the diff opens in Visual
-  Studio's own comparison window &#8212;?left is what is on disk, right is what the model
-  proposes &#8212;?with Accept and Reject. Nothing is written until you accept, and a rejection
+  Studio's own comparison window — left is what is on disk, right is what the model
+  proposes — with Accept and Reject. Nothing is written until you accept, and a rejection
   can carry an explanation that goes straight back to the model.
-- **Visual Studio tools for the agent.** The session gets MCP tools that read IDE state:
-  which solution is open, which files are in the editor. The model stops guessing about
-  your workspace.
+- **Visual Studio tools for the agent.** The session gets read-only MCP tools that report
+  IDE state: which solution is open, which files are in the editor, what you have selected.
+  The model stops guessing about your workspace.
 
-Setup is the VSIX plus one command. Nothing is copied into your repository, no profile is
-rewritten, and uninstalling leaves nothing behind but a folder under `%LOCALAPPDATA%`.
+Setup is the VSIX plus one command. Nothing is copied into your repository, nothing is added
+to your DeepSeek Harness profile, and uninstalling leaves only a folder under
+`%LOCALAPPDATA%` for you to delete if you want it gone.
 
+> **Unofficial.** This is a community-built integration. It is not affiliated with, endorsed
+> by, or supported by DeepSeek. DeepSeek Harness is their product; this repository only adds
+> an IDE surface to it.
+
+**Looking for VS Code?** This is for **Visual Studio** (the IDE). There are separate
+community extensions for VS Code.
 ## Status
 
 Early, but every claim below has been checked somewhere specific, and the table says where.

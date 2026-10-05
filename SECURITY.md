@@ -1,5 +1,7 @@
 # Security
 
+> **Unofficial.** Community-built, not affiliated with or supported by DeepSeek.
+
 What this extension can do, what it deliberately cannot, and where the trust boundaries are.
 Written to be checkable: every claim below names the file that enforces it.
 
