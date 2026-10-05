@@ -24,7 +24,7 @@ namespace DeepSeekHarness.VS
     ///
     /// Two wrong turns worth recording. The <c>CreateTerminalAsync</c> overload taking a
     /// <c>ProfileConfig</c> ignores a profile the service has not seen and falls back to the
-    /// shell's default 闁?the tab takes the requested name and runs PowerShell. And the profile
+    /// shell's default 闂?the tab takes the requested name and runs PowerShell. And the profile
     /// has to be reachable under the overload taking an <see cref="ITerminalProfile"/>, which is
     /// why <c>AddCachedProfile</c> comes first.
     /// </remarks>
@@ -64,6 +64,10 @@ namespace DeepSeekHarness.VS
 
             var profile = BuildProfile(script);
 
+            // Diagnose before touching anything: what the service already knows decides which
+            // launch path can possibly work, and guessing at that has been expensive.
+            await DumpProfilesAsync(terminal, "before");
+
             try
             {
                 // Register first: the profile overload only honours a profile the service knows.
@@ -75,6 +79,8 @@ namespace DeepSeekHarness.VS
                 // Not fatal on its own; the launch below reports the real outcome.
                 _log("could not register the terminal profile: " + ex.Message);
             }
+
+            await DumpProfilesAsync(terminal, "after-register");
 
             // Handing the profile to this call is what selects it. The service resolves a
             // profile by id against its own list rather than trusting the object, which is
@@ -161,6 +167,45 @@ namespace DeepSeekHarness.VS
             return config;
         }
 
+        /// <summary>
+        /// Logs every profile the service knows and which one it calls the default.
+        /// </summary>
+        /// <remarks>
+        /// Added after several launches reported success while running the wrong command.
+        /// The service resolves a profile against its own collection, so "did my profile get
+        /// in, and what does the service consider default" is the fact that decides which
+        /// launch path can work. Guessing at it cost several rounds.
+        /// </remarks>
+        private async Task DumpProfilesAsync(ITerminalService terminal, string stage)
+        {
+            try
+            {
+                var profiles = await terminal.GetProfilesAsync(CancellationToken.None).ConfigureAwait(true);
+                var count = 0;
+                foreach (var p in profiles)
+                {
+                    count++;
+                    _log("profiles[" + stage + "] " + count + ": name='" + p.DisplayName +
+                         "' id='" + p.Id + "' default=" + p.IsDefault +
+                         " pty=" + p.CreatePTY + " loc='" + p.Location + "' args='" + p.Arguments + "'");
+                }
+                _log("profiles[" + stage + "]: " + count + " total");
+            }
+            catch (Exception ex)
+            {
+                _log("profiles[" + stage + "]: listing failed: " + ex.Message);
+            }
+
+            try
+            {
+                var def = await terminal.GetDefaultProfileAsync(CancellationToken.None).ConfigureAwait(true);
+                _log("default[" + stage + "]: " + (def == null ? "(null)" : "name='" + def.DisplayName + "' id='" + def.Id + "'"));
+            }
+            catch (Exception ex)
+            {
+                _log("default[" + stage + "]: lookup failed: " + ex.Message);
+            }
+        }
         /// <summary>
         /// Everything the user could pick from, for the log. Turns a "my profile is missing"
         /// report into something actionable.
