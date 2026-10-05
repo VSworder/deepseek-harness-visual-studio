@@ -31,7 +31,24 @@ as allow, which is why settings.json sets a 24h timeout for this hook.
 #>
 $ErrorActionPreference = 'Stop'
 
+# The hook's own log. Everything below fails open by design, which means a broken hook is
+# indistinguishable from "nothing to review": the decision goes to the model and the user
+# sees a normal edit. The extension's log only records requests that REACHED the bridge, so
+# without this file there is no way to tell "the hook never ran" from "the hook ran and
+# failed" - and those need opposite fixes.
+$script:HookLog = Join-Path (Join-Path $env:LOCALAPPDATA 'DeepSeekHarness') 'hook.log'
+
+function Write-HookLog([string]$message) {
+    try {
+        $dir = Split-Path $script:HookLog -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        $line = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff') + '  ' + $message + "`r`n"
+        [IO.File]::AppendAllText($script:HookLog, $line, (New-Object Text.UTF8Encoding($false)))
+    } catch { }
+}
+
 function Emit([string]$decision, [string]$reason) {
+    Write-HookLog "decision=$decision  reason=$reason"
     @{ hookSpecificOutput = @{
         hookEventName = 'PreToolUse'
         permissionDecision = $decision
@@ -41,7 +58,10 @@ function Emit([string]$decision, [string]$reason) {
 }
 
 # Emit no decision at all: DSH runs its own permission flow for this call.
-function Defer() { exit 0 }
+function Defer([string]$why) {
+    Write-HookLog "defer (no decision)  why=$why"
+    exit 0
+}
 
 # --- line handling --------------------------------------------------------------------
 # Mirrors DSH. Its normalizeLineEndings is exactly `.replaceAll("\r\n", "\n")`, and
@@ -77,16 +97,16 @@ function Restore-Eol([string]$text, [bool]$crlf) {
 # diff empty and the reviewer approve something they never saw.
 function ApplyLiteral([string]$content, [string]$old, [string]$new, [bool]$all) {
     $oldNorm = Normalize-Eol $old
-    if ([string]::IsNullOrEmpty($oldNorm)) { return $null }
+    if ([string]::IsNullOrEmpty($oldNorm)) { Write-HookLog "  literal: empty old text"; return $null }
 
     $crlf = Detect-Crlf $content
     $body = Normalize-Eol $content
     $newNorm = Normalize-Eol $new
 
     $count = $body.Split([string[]]@($oldNorm), [StringSplitOptions]::None).Count - 1
-    if ($count -eq 0) { return $null }
+    if ($count -eq 0) { Write-HookLog "  literal: search text not found"; return $null }
     # DSH refuses an ambiguous edit unless replace_all is set, so DSH would write nothing.
-    if (-not $all -and $count -gt 1) { return $null }
+    if (-not $all -and $count -gt 1) { Write-HookLog "  literal: $count matches, replace_all not set"; return $null }
 
     # DSH replaces every occurrence; replace_all only governs whether it is allowed to.
     $replaced = $body.Replace($oldNorm, $newNorm)
@@ -183,6 +203,7 @@ try {
     # Claude Code's Write/Edit/MultiEdit. PowerShell's switch is case-insensitive,
     # so these labels still match, but keep them lowercase for clarity.
     $tool = [string]$p.tool_name
+    Write-HookLog "invoked  tool=$tool  cwd=$($p.cwd)  pid=$PID"
 
     if ($tool -ne 'write' -and $tool -ne 'edit' -and $tool -ne 'str_replace_editor') {
         Emit 'allow' "unhandled tool $tool"
@@ -192,7 +213,7 @@ try {
     # str_replace_editor names its target `path`, not `file_path`.
     $file = [string]$ti.file_path
     if (-not $file) { $file = [string]$ti.path }
-    if (-not $file) { Defer }
+    if (-not $file) { Defer "no target path in tool_input" }
 
     $cur = if (Test-Path -LiteralPath $file) { Get-Content -Raw -LiteralPath $file -Encoding UTF8 } else { '' }
     if ($null -eq $cur) { $cur = '' }
@@ -206,7 +227,7 @@ try {
     # No faithful reconstruction means we do not know what would be written. Saying
     # nothing lets DSH ask; showing the reviewer an unchanged file would not.
     if ($null -eq $new) {
-        Defer
+        Defer "could not rebuild the proposed content for tool=$tool"
     }
 
     # Locate the live bridge. The extension writes one lock file per VS instance:
@@ -259,7 +280,8 @@ try {
     foreach ($cand in ($cands | Sort-Object Score -Descending)) {
         if (Test-BridgePort $cand.Port) { $port = $cand.Port; $token = $cand.Token; break }
     }
-    if (-not $port) { Emit 'allow' 'no live DeepSeek Harness VS bridge found' }
+    if (-not $port) { Write-HookLog "  no live bridge among $($cands.Count) candidate(s)"; Emit 'allow' 'no live DeepSeek Harness VS bridge found' }
+    Write-HookLog "  posting to port $port"
 
     $body = @{
         filePath       = $file
@@ -283,7 +305,7 @@ try {
     elseif ($resp.ask) {
         # The bridge declined to gate (session belongs to another workspace/IDE):
         # emit NO decision so DSH runs its own permission flow.
-        Defer
+        Defer "the bridge declined to gate this session"
     }
     else {
         $why = if ($resp.reason) { [string]$resp.reason } else { 'Rejected in the Visual Studio diff' }
