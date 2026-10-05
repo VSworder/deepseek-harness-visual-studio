@@ -2,7 +2,7 @@
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
                 xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="DeepSeekHarness.VisualStudio" Version="0.1.0" Language="en-US" Publisher="DeepSeekHarness" />
+    <Identity Id="DeepSeekHarness.VisualStudio" Version="0.2.0" Language="en-US" Publisher="DeepSeekHarness" />
     <DisplayName>DeepSeek Harness for Visual Studio</DisplayName>
     <Description xml:space="preserve">Community-built and unofficial: not affiliated with DeepSeek. Review DeepSeek Harness file edits in Visual Studio's native diff window before they touch disk.
 

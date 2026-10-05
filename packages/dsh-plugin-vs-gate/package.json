@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-harness-vs/dsh-plugin-vs-gate",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Route DeepSeek Harness file edits to Visual Studio's native diff window and let the verdict decide whether the write happens.",
   "type": "module",
   "main": "lib/index.js",

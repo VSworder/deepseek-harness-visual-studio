@@ -1,6 +1,29 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.2.0
+
+The gate is now a DeepSeek Harness plugin in its own right, not only a part of the extension.
+
+- **Installable with `dsh plugin add`.** `packages/dsh-plugin-vs-gate` declares a
+  `dsh.bundle` manifest, so DeepSeek Harness can mount it directly. That is for running the
+  harness in your own terminal rather than through **Start session**; the diff window still
+  comes from the extension, so Visual Studio has to be open with it installed.
+- **It finds Visual Studio without being told where it is.** The extension used to inject the
+  bridge port and token, which is useless to a session it did not start. The plugin now also
+  reads the lock files the extension writes, ranked by how well their workspace matches the
+  session directory.
+- **It says nothing when there is nothing to say.** With no Visual Studio reachable the plugin
+  has no opinion, instead of prompting on every edit. A session the extension launched is the
+  exception and still answers `ask`, because there a window was promised.
+- **A lock file with a byte-order mark is read.** `JSON.parse` rejects a BOM outright, so one
+  used to be skipped in silence and nothing routed — the same shape of failure as the
+  package-directory URL that made the gate absent without a word.
+- **One edit, one diff.** The bridge de-duplicates by call id, so mounting the gate twice —
+  once by the extension, once by a profile install — no longer shows two windows for one
+  change.
+
+## 0.1.0
+
 
 First working version. The diff gate, the Visual Studio tools and one-click session start all
 work; the gate is a plugin this repository owns.
