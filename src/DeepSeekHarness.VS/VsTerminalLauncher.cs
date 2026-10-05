@@ -33,6 +33,10 @@ namespace DeepSeekHarness.VS
         private const string ProfileId = "DeepSeekHarness.VS.Terminal";
         private const string ProfileName = "DeepSeek Harness";
 
+        /// <summary>Full path to the command processor, as Visual Studio's own profile uses.</summary>
+        private static readonly string CommandProcessorPath =
+            System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+
         private readonly IServiceProvider _serviceProvider;
         private readonly Action<string> _log;
 
@@ -154,15 +158,19 @@ namespace DeepSeekHarness.VS
         /// </remarks>
         private static ProfileConfig BuildProfile(string scriptPath)
         {
+            // Two details are copied from the command prompt profile Visual Studio ships
+            // (loc='C:\Windows\system32\cmd.exe', args='/k ""%VSAPPIDDIR%\..\VsDevCmd.bat"'):
+            // the location is a full path, and the command after /k is double-quoted.
+            //
+            // Getting these wrong is not a cosmetic problem. A bare 'cmd.exe' with a
+            // single-quoted command registered, listed, resolved by id and launched without
+            // error - and ran the default shell anyway. The profile shape, not the
+            // registration, was what the terminal service rejected.
             var config = new ProfileConfig(
                 displayName: ProfileName,
-                location: "cmd.exe",
-                arguments: "/k \"" + scriptPath + "\"",
-                // Not the default. Selection here is explicit, by handing the profile to the
-                // launch call; marking it default would also redirect the user's own New
-                // Terminal, which this extension has no business doing.
+                location: CommandProcessorPath,
+                arguments: "/k \"\"" + scriptPath + "\"\"",
                 isDefault: false);
-
             config.Id = ProfileId;
             return config;
         }
