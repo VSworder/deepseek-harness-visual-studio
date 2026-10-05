@@ -22,6 +22,18 @@ The gate is now a DeepSeek Harness plugin in its own right, not only a part of t
   once by the extension, once by a profile install — no longer shows two windows for one
   change.
 
+### The publisher
+
+The manifest said `Publisher="DeepSeekHarness"`, which has to match the Visual Studio
+Marketplace publisher ID exactly - an upload with a mismatched publisher is rejected. That
+name is not one this project can register, because it reads as the vendor, so the publisher
+is `VSworder`, the same name as the GitHub account.
+
+**If you installed 0.2.0 from the GitHub release before this change, uninstall it first.**
+Visual Studio identifies an extension by publisher and id together, so the old build and the
+new one are two different extensions: both would be installed, and both would answer the
+same commands.
+
 ## 0.1.0
 
 
