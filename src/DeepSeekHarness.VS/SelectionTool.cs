@@ -1,0 +1,102 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using DeepSeekHarness.Bridge;
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.TextManager.Interop;
+
+namespace DeepSeekHarness.VS
+{
+    /// <summary>
+    /// Returns the text currently selected in the editor.
+    /// </summary>
+    /// <remarks>
+    /// Saves the user from describing what they are looking at, and reads the editor buffer
+    /// so unsaved edits are included: what is on screen is what the model gets.
+    ///
+    /// Built on the classic text-manager contracts (<see cref="IVsTextView"/> and
+    /// <see cref="IVsTextLines"/>) rather than the newer editor API, which lives in NuGet
+    /// packages this extension deliberately does not take.
+    /// </remarks>
+    internal sealed class SelectionTool : IIdeTool
+    {
+        /// <summary>Upper bound on returned text, so one selection cannot flood the context.</summary>
+        private const int MaxCharacters = 8000;
+
+        private readonly IServiceProvider _serviceProvider;
+
+        public SelectionTool(IServiceProvider serviceProvider)
+        {
+            _serviceProvider = serviceProvider;
+        }
+
+        public string Name { get { return "get_current_selection"; } }
+
+        public string Description
+        {
+            get
+            {
+                return "Return the text currently selected in the active editor, with its file path and " +
+                       "line range. Returns a message instead when nothing is selected. Prefer this over " +
+                       "asking the user to paste code.";
+            }
+        }
+
+        public string InputSchemaJson { get { return ToolSchema.None(); } }
+
+        public string Invoke(IReadOnlyDictionary<string, string> arguments)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            string filePath;
+            var view = ActiveEditor.Find(_serviceProvider, out filePath);
+
+            if (view == null)
+                return "No active text editor.";
+
+            int anchorLine, anchorColumn, endLine, endColumn;
+            if (view.GetSelection(out anchorLine, out anchorColumn, out endLine, out endColumn) != 0)
+                return "Nothing is selected in " + (filePath ?? "the active editor") + ".";
+
+            // A zero-width span is a caret, not a selection.
+            if (anchorLine == endLine && anchorColumn == endColumn)
+                return "Nothing is selected in " + (filePath ?? "the active editor") + ".";
+
+            var text = ReadSelection(view, anchorLine, anchorColumn, endLine, endColumn);
+
+            if (string.IsNullOrEmpty(text))
+                return "Nothing is selected in " + (filePath ?? "the active editor") + ".";
+
+            var truncated = string.Empty;
+            if (text.Length > MaxCharacters)
+            {
+                text = text.Substring(0, MaxCharacters);
+                truncated = "\n\n[truncated at " + MaxCharacters + " characters]";
+            }
+
+            // The view reports 0-based lines; the transcript reads better 1-based.
+            return "Selected from " + (filePath ?? "(unsaved document)") +
+                   ", lines " + (anchorLine + 1) + "-" + (endLine + 1) +
+                   " (" + (endLine - anchorLine + 1) + " line(s)):\n\n" +
+                   text + truncated;
+        }
+
+        /// <summary>
+        /// Reads the selected span. <see cref="IVsTextView.GetSelection"/> yields coordinates
+        /// only, so the text comes from the underlying buffer.
+        /// </summary>
+        private static string ReadSelection(IVsTextView view, int startLine, int startColumn, int endLine, int endColumn)
+        {
+            IVsTextLines buffer;
+            if (view.GetBuffer(out buffer) != 0 || buffer == null) return null;
+
+            string text;
+            if (buffer.GetLineText(startLine, startColumn, endLine, endColumn, out text) == 0)
+                return text;
+
+            return null;
+        }
+    }
+}

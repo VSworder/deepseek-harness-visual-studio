@@ -4,6 +4,7 @@ using System.Text;
 using DeepSeekHarness.Bridge;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.TextManager.Interop;
 
 namespace DeepSeekHarness.VS
 {
@@ -193,6 +194,60 @@ namespace DeepSeekHarness.VS
                 {
                     System.Runtime.InteropServices.Marshal.Release(hierarchyPointer);
                 }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shared lookup for "the editor the user is looking at", used by more than one tool.
+    /// </summary>
+    internal static class ActiveEditor
+    {
+        /// <summary>
+        /// Resolves the active text view and its file path. The path comes from the window
+        /// frame, so a buffer that was never saved still reports where it belongs.
+        /// </summary>
+        public static IVsTextView Find(IServiceProvider serviceProvider, out string filePath)
+        {
+            filePath = null;
+
+            try
+            {
+                var monitorSelection = serviceProvider.GetService(typeof(SVsShellMonitorSelection)) as IVsMonitorSelection;
+                if (monitorSelection == null) return null;
+
+                IntPtr framePointer;
+                uint itemId;
+                IVsMultiItemSelect multiSelect;
+                IntPtr selectionContainer;
+
+                if (monitorSelection.GetCurrentSelection(out framePointer, out itemId, out multiSelect, out selectionContainer) != 0)
+                    return null;
+
+                if (framePointer == IntPtr.Zero) return null;
+
+                IVsWindowFrame frame;
+                try
+                {
+                    frame = System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(framePointer) as IVsWindowFrame;
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.Release(framePointer);
+                }
+
+                if (frame == null) return null;
+
+                // The frame knows the file it is showing; the text view alone does not.
+                object pathValue;
+                if (frame.GetProperty((int)__VSFPROPID.VSFPROPID_pszMkDocument, out pathValue) == 0)
+                    filePath = pathValue as string;
+
+                return VsShellUtilities.GetTextView(frame);
             }
             catch (Exception)
             {

@@ -159,6 +159,7 @@ namespace DeepSeekHarness.VS
             return new IIdeTool[]
             {
                 new EnvironmentTool(this, _matcher),
+                new SelectionTool(this),
                 new OpenFilesTool(this)
             };
         }
