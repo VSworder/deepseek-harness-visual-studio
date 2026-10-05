@@ -159,9 +159,12 @@ dsh plugin add github:VSworder/deepseek-harness-visual-studio#packages/dsh-plugi
 ```
 
 That is for running DeepSeek Harness in your own terminal rather than through **Start
-session**. The window still comes from the extension — it is what owns the loopback bridge
-— so Visual Studio has to be open with the extension installed. Nothing needs the extension
-to have *launched* the session.
+session**, and it gets the same thing: the diff gate, and the three Visual Studio tools.
+The plugin mounts the MCP client itself once it finds a bridge, so every route ends up with
+the same set. The window still comes from the extension — it is what owns the loopback
+bridge — so Visual Studio has to be open with the extension installed. Nothing needs the
+extension to have *launched* the session, and with neither one running the plugin stays out
+of the way entirely.
 
 With no Visual Studio reachable the plugin says nothing at all and the harness handles the
 call as if it were not installed. That is deliberate: prompting on every edit would be a

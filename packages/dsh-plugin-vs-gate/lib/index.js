@@ -71,8 +71,93 @@ function apply(ctx) {
 			if (decision === undefined) return next();
 			return decision;
 		});
+
+		yield mountVisualStudioTools(ctx);
 	}, 'vs-gate lifecycle');
 }
+
+/**
+ * Mounts the MCP client that gives the agent the Visual Studio tools, and returns a
+ * disposer.
+ *
+ * The tools are a second plugin - `@deepseek-ai/dsh-mcp-client` pointed at the extension's
+ * loopback endpoint - and nothing else mounts it. The extension's generated patch used to
+ * carry the entry itself, which meant a session started any other way had the diff gate and
+ * none of the tools. Owning it here instead gives every route the same set, and leaves one
+ * place that can mount it, so there is no way to end up with each tool registered twice.
+ *
+ * The client needs a concrete URL up front, so unlike the gate - which rediscovers the
+ * bridge on every call - this can only be pointed at a Visual Studio that already exists.
+ * Hence the retry: starting the session first and Visual Studio second is an ordinary order
+ * to do things in.
+ */
+function mountVisualStudioTools(ctx) {
+	// A context with no service resolver has no loader, and a host with no loader has no way
+	// to mount anything. That is a reason to skip this, not to fail the session.
+	const loader = ctx.get?.('loader');
+	if (loader === undefined || typeof loader.import !== 'function') return () => {};
+
+	let timer;
+	let giveUp;
+	let settled = false;
+
+	const attempt = async () => {
+		if (settled) return;
+
+		// Whichever bridge is best right now. This client needs a concrete URL up front, so
+		// unlike the gate - which rediscovers on every call - it can only be pointed at a
+		// Visual Studio that already exists.
+		const target = bridgeCandidates()[0];
+		if (target === undefined) return;
+
+		settled = true;
+		clearInterval(timer);
+		clearTimeout(giveUp);
+		timer = undefined;
+		giveUp = undefined;
+
+		try {
+			// Loaded through the loader rather than imported here: this file sits outside any
+			// node_modules when the extension mounts it, and even a package install would have
+			// to rely on hoisting to reach a sibling. The loader resolves plugin names for a
+			// living, which is exactly what this is.
+			const client = await loader.import('@deepseek-ai/dsh-mcp-client');
+			ctx.plugin(client, {
+				serverName: 'vs',
+				transport: 'streamable-http',
+				url: `http://127.0.0.1:${target.port}/mcp`,
+				headers: { 'x-dsh-vs-authorization': target.token },
+				// Visual Studio can close while the session lives on, and a client that refused
+				// to start without its server would take the session down with it.
+				failOnStartupError: false
+			});
+			ctx.logger?.info?.(`vs-gate: Visual Studio tools mounted from port ${target.port}`);
+		} catch (error) {
+			// Losing the tools is not a reason to lose the session, and it is not something to
+			// keep quiet about either. One warning, once.
+			ctx.logger?.warn?.(`vs-gate: could not mount the Visual Studio tools: ${error?.message ?? error}`);
+		}
+	};
+
+	// Visual Studio is allowed to start after the session does. That is an ordinary order to
+	// do things in, and the alternative is an agent with no tools until the user thinks to
+	// restart. Bounded rather than endless: after ten minutes the session has been running
+	// without an IDE, and polling a directory forever is not worth the tidiness.
+	attempt();
+	timer = setInterval(attempt, 10000);
+	giveUp = setTimeout(() => {
+		settled = true;
+		clearInterval(timer);
+		timer = undefined;
+	}, 10 * 60 * 1000);
+
+	return () => {
+		clearInterval(timer);
+		clearTimeout(giveUp);
+	};
+}
+
+
 
 /**
  * The decision for one call, or undefined when this plugin has no opinion.

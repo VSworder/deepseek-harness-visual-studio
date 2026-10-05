@@ -2,7 +2,7 @@
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
                 xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="DeepSeekHarness.VisualStudio" Version="0.2.1" Language="en-US" Publisher="VSworder" />
+    <Identity Id="DeepSeekHarness.VisualStudio" Version="0.2.2" Language="en-US" Publisher="VSworder" />
     <DisplayName>DeepSeek Harness for Visual Studio</DisplayName>
     <!-- The schema caps this element at 1000 characters after entity decoding, and the cap
          is on the parsed value, not on the XML. Keep it tight. -->

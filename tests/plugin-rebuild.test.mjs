@@ -12,13 +12,24 @@
 // Run: node tests/plugin-rebuild.test.mjs
 
 import { createServer } from 'node:http';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginUrl = pathToFileURL(join(here, '..', 'packages', 'dsh-plugin-vs-gate', 'lib', 'index.js')).href;
+
+// Hermetic. The plugin finds a bridge by scanning %LOCALAPPDATA%\DeepSeekHarness\vs-bridge, so
+// these tests point that at a scratch directory of their own. Without this they read whatever
+// the machine happens to have, and a real Visual Studio running alongside turns the "no
+// bridge" cases into a live bridge answering - which then fails as a denial, nowhere near the
+// cause.
+const scratchLocalAppData = mkdtempSync(join(tmpdir(), 'vs-gate-appdata-'));
+process.env.LOCALAPPDATA = scratchLocalAppData;
+process.on('exit', () => {
+	try { rmSync(scratchLocalAppData, { recursive: true, force: true }); } catch { /* best effort */ }
+});
 
 const workDir = mkdtempSync(join(tmpdir(), 'vs-gate-test-'));
 
@@ -42,7 +53,10 @@ async function loadListener(module) {
   const { apply } = await import(`${pluginUrl}?v=${Math.random()}`);
   let captured = null;
   const ctx = {
-    effect(fn) {
+    // No loader: this host cannot mount anything, which the plugin has to accept rather than
+  // crash on. The mount path has its own test below.
+  get() { return undefined; },
+  effect(fn) {
       // Drive the generator to completion so ctx.on(...) runs and the listener is captured.
       // No value is passed back: the plugin's generator only calls ctx.on and then ends.
       for (const _ of fn()) { /* the effect body registers its own listeners */ }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.2
+
+The plugin now gives the agent the Visual Studio tools, not just the diff gate.
+
+Installed with `dsh plugin add`, it used to hand over the gate and nothing else: the MCP
+client that carries `get_environment`, `get_open_files` and `get_current_selection` was an
+entry in the patch the extension generates, and a session started any other way never saw
+it. Someone who installed the plugin on its own got a visibly smaller product than someone
+who pressed **Start session** - and nothing said so.
+
+The plugin mounts that client itself now. It asks the loader for
+`@deepseek-ai/dsh-mcp-client` - the same way the loader resolves every patch entry, and the
+only way that works, because this file sits outside any `node_modules` when the extension
+mounts it - and points it at whatever bridge it finds. The extension's patch no longer
+carries the entry, so there is exactly one place that can mount it and no way to end up with
+every tool registered twice.
+
+It retries for ten minutes rather than trying once, because starting the session first and
+Visual Studio second is an ordinary order to do things in.
+
 ## 0.2.1
 
 Behaviour is unchanged from 0.2.0. Three things in the manifest were wrong, and all three
