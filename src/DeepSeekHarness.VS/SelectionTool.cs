@@ -102,10 +102,18 @@ namespace DeepSeekHarness.VS
             if (view.GetBuffer(out buffer) != 0 || buffer == null)
                 return "Nothing is selected in " + file + " (caret at line " + (line + 1) + ").";
 
-            // Read the caret's whole line: a bare caret offset is not worth a round trip.
-            string text;
-            if (buffer.GetLineText(line, 0, line, -1, out text) != 0 || text == null)
+            // Read the caret's whole line. The end index is taken from GetLengthOfLine rather
+            // than passed as -1: the API treats the index as a character offset, so -1 is not
+            // "to end of line" and comes back empty. Selection reading worked all along
+            // because it uses real offsets from GetSelection.
+            int length;
+            if (buffer.GetLengthOfLine(line, out length) != 0)
                 return "Nothing is selected in " + file + " (caret at line " + (line + 1) + ").";
+
+            string text;
+            if (length <= 0 || buffer.GetLineText(line, 0, line, length, out text) != 0 || text == null)
+                return "Nothing is selected. The caret is on " + file + ", line " + (line + 1) +
+                       " (the line is empty).";
 
             return "Nothing is selected. The caret is on " + file + ", line " + (line + 1) +
                    ":\n\n" + text.TrimEnd('\r', '\n');
