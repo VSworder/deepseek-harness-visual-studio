@@ -20,9 +20,19 @@ Early, but the core is verified end to end.
 | Piece | State |
 | --- | --- |
 | Diff gate (lock file, hook, `/permission`) | Works; verified against a real DeepSeek Harness session |
-| MCP endpoint + IDE tools | Works; verified with the same MCP client library DeepSeek Harness uses |
+| MCP endpoint | Works; verified with the same MCP client library DeepSeek Harness uses |
+| `get_environment`, `get_open_files` | Verified in a live agent session |
+| `get_current_selection` | Implemented; not yet exercised inside Visual Studio |
 | Status command | Works |
 | Launching the session from Visual Studio | **Not yet.** Start the session yourself with the command below |
+
+The tools the agent gets:
+
+| Tool | Reads |
+| --- | --- |
+| `mcp__vs__get_environment` | solution path, workspace folder, process id |
+| `mcp__vs__get_open_files` | the files in the editor, with the active one marked |
+| `mcp__vs__get_current_selection` | the selected text, its file and line range |
 
 ## Requirements
 
