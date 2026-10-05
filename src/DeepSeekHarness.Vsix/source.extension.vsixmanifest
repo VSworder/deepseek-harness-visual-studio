@@ -4,16 +4,22 @@
   <Metadata>
     <Identity Id="DeepSeekHarness.VisualStudio" Version="0.2.0" Language="en-US" Publisher="VSworder" />
     <DisplayName>DeepSeek Harness for Visual Studio</DisplayName>
+    <!-- The schema caps this element at 1000 characters after entity decoding, and the cap
+         is on the parsed value, not on the XML. Keep it tight. -->
     <Description xml:space="preserve">Community-built and unofficial: not affiliated with DeepSeek. Review DeepSeek Harness file edits in Visual Studio's native diff window before they touch disk.
 
-DeepSeek Harness (dsh) is a terminal agent. This extension gives it the one thing a terminal cannot: a real diff. When the agent wants to change a file, the diff opens beside your code &#8212; left is what is on disk, right is what the model proposes &#8212; and a small prompt offers Accept or Reject. Nothing is written until you accept, and a rejection can carry an explanation that goes straight back to the model.
+DeepSeek Harness (dsh) is a terminal agent. This extension gives it the one thing a terminal cannot: a real diff. When the agent wants to change a file, the diff opens beside your code &#8212; left is what is on disk, right is what the model proposes &#8212; with Accept and Reject. Nothing is written until you accept, and a rejection carries your reason back to the model.
 
-Setup is just the VSIX. The extension writes the gate plugin DeepSeek Harness loads and advertises itself through a loopback lock file. No YAML editing, no scripts to copy into your repository, and nothing is added to your DeepSeek Harness profile.
+Setup is just the VSIX. Nothing is added to your DeepSeek Harness profile, and nothing is copied into your repository.
 
-Uninstalling removes the extension itself. Use "Tools &gt; DeepSeek Harness &gt; Remove everything" first: a VSIX uninstall cannot run code, so it would otherwise leave the plugin behind.</Description>
-    <MoreInfo>https://github.com/</MoreInfo>
+Uninstalling removes every capability, because without Visual Studio there is no bridge and no diff window. What remains is a folder under %LOCALAPPDATA%. Tools &gt; DeepSeek Harness &gt; Clean up installed files removes it, and is optional.</Description>
+    <MoreInfo>https://github.com/VSworder/deepseek-harness-visual-studio</MoreInfo>
     <License>LICENSE.txt</License>
     <Tags>deepseek, dsh, agent, ai, diff, llm, coding assistant</Tags>
+    <!-- The Marketplace shows a preview badge from this element. The checkbox on the
+         publisher portal only applies to extensions listed by link rather than uploaded as
+         a VSIX, so for an uploaded one this is the only place it can be set. -->
+    <Preview>true</Preview>
   </Metadata>
   <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14,19.0)">
