@@ -19,7 +19,7 @@ Early, but the core is verified end to end.
 
 | Piece | State |
 | --- | --- |
-| Diff gate (lock file, hook, `/permission`) | Works; verified against a real DeepSeek Harness session |
+| Diff gate (plugin, `/permission`) | Works; verified against a real DeepSeek Harness session |
 | MCP endpoint | Works; verified with the same MCP client library DeepSeek Harness uses |
 | `get_environment`, `get_open_files` | Verified in a live agent session |
 | `get_current_selection` | Verified in a live session: with a selection, and with a bare caret |
@@ -52,7 +52,7 @@ Adjust the path for your edition. Restart Visual Studio afterwards.
 
 ## Use
 
-Open a solution. The extension starts a loopback bridge and writes its hooks and a DSH
+Open a solution. The extension starts a loopback bridge and writes its gate plugin and a DSH
 patch under `%LOCALAPPDATA%\DeepSeekHarness\`.
 
 Check that the gate is armed:
@@ -74,34 +74,58 @@ In that session, the agent can call the Visual Studio tools as `mcp__vs__*`.
 
 ```
 agent wants to write a file
-  -> DeepSeek Harness runs the PreToolUse hook
-  -> the hook posts the proposed content to the extension's loopback endpoint
+  -> the gate plugin intercepts the call at tools/pre-execute
+  -> it reads the file and works out the exact bytes the tool would write
+  -> it posts both to the extension's loopback endpoint
   -> the extension opens Visual Studio's native diff
   -> you accept or reject
-  -> the verdict becomes the hook's permission decision
-  -> accepted writes land; a rejection returns your reason to the model
+  -> the verdict becomes the call's pre-execute decision
+  -> accepted writes land; a rejection fails the call with your reason attached
 ```
 
 The agent reaches Visual Studio state over MCP: the extension serves `/mcp` on the same
 loopback endpoint and registers itself with `dsh-mcp-client`.
 
-### Three problems worth knowing about
+### The gate is a plugin this repository owns
 
-These cost real debugging time and shape the design.
+`src/DeepSeekHarness.DshPlugin` is a DeepSeek Harness plugin. The extension embeds it in the
+VSIX, writes it under `%LOCALAPPDATA%\DeepSeekHarness\dsh-plugin`, and mounts it from the
+generated patch.
 
-**1. The hook must not live in your repository.** DeepSeek Harness runs command hooks
-through `ctx.shell`, which on Windows is Git Bash, and `&` in a path is a command
-separator there. A hook installed in a repository called `Move&Jump` never runs at all 閳?silently, because a missing hook is indistinguishable from an allowed edit. Installing
-under the user profile avoids the whole class of problem.
+It speaks the harness's own `tools/pre-execute` contract rather than Claude Code's
+`hookSpecificOutput` format. An earlier version borrowed `@deepseek-ai/dsh-hooks-claude-code`
+and drove it from a PowerShell script; the reasons that was replaced are worth recording,
+because two of them were bugs that took a long time to see:
 
-**2. The hook timeout must be 24 hours.** DeepSeek Harness defaults a hook with no
-`timeout` to **10 minutes** (`DEFAULT_HOOK_TIMEOUT_MS = 600000`) and treats a killed hook
-as *allow*. A diff review can exceed that, and the failure mode is a silently disabled
-gate. The generated config always writes `"timeout": 86400`.
+**1. A package directory cannot be imported.** The patch named the borrowed package by a URL
+ending in the package name. Node answers `ERR_UNSUPPORTED_DIR_IMPORT` for that — only bare
+specifiers get package resolution — and the harness reports the failure as one line,
+`entry did not activate`, then carries on. The gate was simply absent while the MCP entry in
+the same patch kept working, so every part of the integration looked healthy. If a mount
+fails, say so loudly; a component that fails open and silently is worse than one that fails.
 
-**3. Tool names are lowercase.** DeepSeek Harness calls them `write` and `edit`, where
-Claude Code uses `Write` and `Edit`. A matcher that does not match means the hook never
-runs, and again the failure is silent.
+**2. Out of process means guessing.** The script only saw the tool's arguments, so it had to
+reconstruct the result. That produced two defects that each showed the reviewer a diff
+with no changes in it, which is worse than no diff: a name clash where `str_replace_editor`'s
+`create` and `insert` commands carry no `old_str`, and a CRLF conversion that inserted a
+carriage return into an already-CRLF search string. A plugin runs in-process and reads the
+file, so the proposal is built from the same bytes the tool will write.
+
+**3. Failure must not look like success.** The script failed open: a missing bridge meant
+every edit landed unreviewed. The plugin answers `ask` instead, handing the call to the
+harness's own permission flow. "I cannot show you this change" is not the same as "this
+change is fine".
+
+### Two problems still worth knowing about
+
+**1. An ambiguous edit is refused, not reviewed.** The harness rejects an `edit` whose
+`old_string` matches more than once unless `replace_all` is set, and refuses one that does
+not match at all. The plugin recognises both and declines to gate, so nothing is written and
+the reviewer is never shown a change that cannot happen.
+
+**2. Nothing here is installed into your DeepSeek Harness profile.** The plugin lives under
+the extension's own directory and the patch mounts it from there. The harness configuration
+the user owns — approval policy, sandbox policy, profile dependencies — is not touched.
 
 ## Building
 
@@ -119,17 +143,18 @@ The VSIX lands in `artifacts\`. Visual Studio is located with `vswhere`; overrid
 
 ```
 src/
-  DeepSeekHarness.Bridge/   loopback endpoint: lock file, /permission, /mcp  (no VS dependency)
-  DeepSeekHarness.Setup/    locating dsh, generating the hook, settings and patch
-  DeepSeekHarness.VS/       the VSIX: package, diff window, IDE tools, commands
-  DeepSeekHarness.Vsix/     packaging
-scripts/
-  vs-permission-hook.ps1    the PreToolUse hook, embedded in the VSIX
+  DeepSeekHarness.Bridge/     loopback endpoint: lock file, /permission, /mcp  (no VS dependency)
+  DeepSeekHarness.Setup/      locating dsh, generating the plugin mount and patch
+  DeepSeekHarness.VS/         the VSIX: package, diff window, IDE tools, commands
+  DeepSeekHarness.Vsix/       packaging
+  DeepSeekHarness.DshPlugin/  the gate plugin, embedded in the VSIX
 docs/
-  protocol.md               /permission contract
+  protocol.md                 /permission contract
 tests/
-  BridgeHarness.cs          runs the bridge standalone, for protocol testing
-  mcp-sdk-test.mjs          drives /mcp with the real MCP client library
+  BridgeHarness.cs            runs the bridge standalone, for protocol testing
+  mcp-sdk-test.mjs            drives /mcp with the real MCP client library
+  plugin-rebuild.test.mjs     asserts the proposal the gate plugin builds
+  fake-bridge.mjs             stand-in bridge for tests
 ```
 
 `DeepSeekHarness.Bridge` deliberately has no Visual Studio dependency, so the protocol can
