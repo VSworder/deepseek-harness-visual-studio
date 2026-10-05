@@ -27,7 +27,7 @@ Early, but every claim below has been checked somewhere specific, and the table 
 | `get_current_selection` | Verified in a live session: with a selection, and with a bare caret |
 | Starting a session from Visual Studio | **Works.** Tools — DeepSeek Harness — Start session |
 | Status command | Works |
-| `str_replace_editor` (create, insert, str_replace, view) | **Unit tests only.** The sessions used for the checks above did not have this tool mounted, so its four commands have never run against the gate |
+| `str_replace_editor` (create, insert, str_replace, view) | **Verified** against a session with the tool mounted. `create`, `str_replace` and `insert` each sent the correct before/after content; `view` did not reach the bridge at all, which is the read exemption working |
 
 The tool surface the agent gets:
 

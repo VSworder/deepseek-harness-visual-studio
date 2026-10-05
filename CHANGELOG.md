@@ -17,6 +17,9 @@ work; the gate is a plugin this repository owns.
   landed unreviewed and nothing said so.
 - **Reads are not gated**, and neither are `edit`s the harness itself would refuse — an
   unmatched or ambiguous search shows no diff, because there is no change to review.
+- **All four `str_replace_editor` commands behave.** `create`, `str_replace` and `insert` send
+  the correct before and after content; `view` never reaches the bridge, which is the read
+  exemption. Verified against a session with that tool mounted.
 
 ### The Visual Studio tools
 
