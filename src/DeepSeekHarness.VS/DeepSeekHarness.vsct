@@ -52,9 +52,8 @@
       <Button guid="guidDeepSeekHarnessCmdSet" id="cmdStatus" priority="0x0200" type="Button">
         <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
         <Strings>
-          <ButtonText>Status…</ButtonText>
-          <CommandName>Status</CommandName>
-          <ToolTipText>Report whether the diff gate is armed, and where to look when it is not</ToolTipText>
+          <ButtonText>Status&#8230;</ButtonText>
+          <CommandName>Start session</CommandName>
         </Strings>
       </Button>
 
@@ -65,13 +64,21 @@
           <CommandName>Start session</CommandName>
         </Strings>
       </Button>
-
       <Button guid="guidDeepSeekHarnessCmdSet" id="cmdOpenLog" priority="0x0400" type="Button">
         <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
         <Strings>
           <ButtonText>Open log</ButtonText>
           <CommandName>Open log</CommandName>
           <ToolTipText>Open the extension log in the editor</ToolTipText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidDeepSeekHarnessCmdSet" id="cmdRemove" priority="0x0500" type="Button">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
+        <Strings>
+          <ButtonText>Remove everything…</ButtonText>
+          <CommandName>Remove everything</CommandName>
+          <ToolTipText>Delete the hook, its DeepSeek Harness config and this extension's files. Uninstalling the VSIX does not do this.</ToolTipText>
         </Strings>
       </Button>
     </Buttons>
@@ -89,6 +96,7 @@
       <IDSymbol name="cmdStartSessionContext" value="0x0101" />
       <IDSymbol name="cmdStatus" value="0x0102" />
       <IDSymbol name="cmdOpenLog" value="0x0103" />
+        <IDSymbol name="cmdRemove" value="0x0104" />
     </GuidSymbol>
 
     <!--

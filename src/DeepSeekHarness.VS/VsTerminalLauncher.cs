@@ -80,17 +80,34 @@ namespace DeepSeekHarness.VS
 
             try
             {
-                // Register first: the profile overload only honours a profile the service knows.
+                // Register first: profile resolution looks the profile up in the service's own
+                // list, so an unregistered profile is dropped and the terminal silently runs
+                // the default shell instead.
                 terminal.AddCachedProfile(profile);
                 _log("registered terminal profile '" + ProfileName + "'");
             }
             catch (Exception ex)
             {
-                // Not fatal on its own; the launch below reports the real outcome.
-                _log("could not register the terminal profile: " + ex.Message);
+                // Fatal. An earlier version logged this and carried on, which opened a plain
+                // shell while the log claimed a session had started with our profile - an
+                // ungated session the user would reasonably believe was gated. Registration is
+                // the only thing that makes the terminal run the TUI, so there is nothing
+                // worth opening without it.
+                _log("could not register the terminal profile, so no session was started: " + ex);
+                return null;
             }
 
             await DumpProfilesAsync(terminal, "after-register");
+
+            // Do not report a launch that the service did not honour. Every failure mode found
+            // while building this looked identical from the call site: no exception, a
+            // terminal id, and the default shell. Checking the profile back is cheap.
+            if (!await ProfileIsRegisteredAsync(terminal, cancellationToken).ConfigureAwait(true))
+            {
+                _log("the terminal service did not accept profile '" + ProfileName +
+                     "'; no session was started");
+                return null;
+            }
 
             // This is the call that works, and the contract dump is why it was found:
             // TerminalWindowOptions carries Name, Profile and WorkingDirectory - properties
@@ -231,6 +248,32 @@ namespace DeepSeekHarness.VS
                 }
             }
         }
+        /// <summary>
+        /// Whether the service's profile list now contains our profile.
+        /// </summary>
+        /// <remarks>
+        /// The launch call reports success whether or not it honoured the profile, so the
+        /// only trustworthy confirmation is asking the service what it has.
+        /// </remarks>
+        private async Task<bool> ProfileIsRegisteredAsync(ITerminalService terminal, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var profiles = await terminal.GetProfilesAsync(cancellationToken).ConfigureAwait(true);
+                foreach (var candidate in profiles)
+                {
+                    if (string.Equals(candidate.Id, ProfileId, StringComparison.Ordinal)) return true;
+                }
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Cannot prove it is registered; say so rather than claim a launch.
+                _log("could not confirm the terminal profile: " + ex.Message);
+                return false;
+            }
+        }
+
         /// <summary>
         /// Logs every profile the service knows and which one it calls the default.
         /// </summary>

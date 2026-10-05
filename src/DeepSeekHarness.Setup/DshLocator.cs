@@ -86,6 +86,17 @@ namespace DeepSeekHarness.Setup
         /// </summary>
         public static string FindDshPackageDirectory()
         {
+            // Derive from the launcher first. That finds the package wherever it actually is:
+            // the root candidates below only cover npm's default layouts, so a custom
+            // `npm config set prefix`, or a pnpm/volta/fnm global install, would resolve the
+            // launcher from PATH and then report the hook package as missing on a machine
+            // where it is installed.
+            foreach (var launcher in new[] { FindTuiCommand(), FindDshCommand() })
+            {
+                var derived = DerivePackageDirectory(launcher);
+                if (derived != null) return derived;
+            }
+
             foreach (var root in CandidateRoots())
             {
                 try
@@ -96,6 +107,29 @@ namespace DeepSeekHarness.Setup
                 }
                 catch (ArgumentException) { }
             }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The <c>@deepseek-ai/dsh</c> directory implied by a launcher path, or null.
+        /// npm puts the launcher directly in the prefix, so
+        /// <c>&lt;prefix&gt;\dsh.cmd</c> means <c>&lt;prefix&gt;\node_modules\@deepseek-ai\dsh</c>.
+        /// </summary>
+        private static string DerivePackageDirectory(string launcherPath)
+        {
+            if (string.IsNullOrEmpty(launcherPath)) return null;
+
+            try
+            {
+                var prefix = Path.GetDirectoryName(launcherPath);
+                if (string.IsNullOrEmpty(prefix)) return null;
+
+                var path = Path.Combine(prefix, "node_modules", "@deepseek-ai", "dsh");
+                if (Directory.Exists(path) && File.Exists(Path.Combine(path, "package.json")))
+                    return path;
+            }
+            catch (ArgumentException) { }
 
             return null;
         }
@@ -163,20 +197,19 @@ namespace DeepSeekHarness.Setup
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
 
-            var full = Path.GetFullPath(path).Replace('\\', '/');
-            var encoded = new StringBuilder("file:///");
-
-            foreach (var c in full)
+            // Uri produces the same canonical form DSH writes itself (file:///C:/...), and it
+            // percent-encodes UTF-8 bytes. The previous hand-rolled version encoded one UTF-16
+            // code unit at a time, which is only valid for characters that need no encoding -
+            // a non-ASCII non-letter in the path (or a surrogate pair) produced bytes that are
+            // not valid percent-encoded UTF-8, and the loader could not resolve the package.
+            try
             {
-                // Keep the separators and the characters npm paths actually use; percent
-                // encode the rest so a space or a '#' cannot truncate the URL.
-                if (char.IsLetterOrDigit(c) || c == '/' || c == '-' || c == '_' || c == '.' || c == '~' || c == '@')
-                    encoded.Append(c);
-                else
-                    encoded.Append('%').Append(((int)c).ToString("X2"));
+                return new Uri(Path.GetFullPath(path)).AbsoluteUri;
             }
-
-            return encoded.ToString();
+            catch (UriFormatException)
+            {
+                return null;
+            }
         }
     }
 }

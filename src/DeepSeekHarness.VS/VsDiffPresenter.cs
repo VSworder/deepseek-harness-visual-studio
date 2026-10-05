@@ -36,65 +36,77 @@ namespace DeepSeekHarness.VS
             if (differenceService == null)
                 return DiffOutcome.CouldNotPresent("IVsDifferenceService is unavailable");
 
-            // The diff needs both sides on disk; the left side is the file as it is now.
-            var leftExists = System.IO.File.Exists(filePath);
-            if (!leftExists)
+            // The diff needs both sides on disk. For a file that does not exist yet, stage an
+            // empty stand-in instead of creating the real file: an earlier version wrote the
+            // target (and its parent directories) before asking anything, so rejecting a
+            // proposed new file still left a zero-byte file and a new directory tree in the
+            // user's repository. VS never creates a file just because a diff names it, so the
+            // moniker does not have to exist on disk.
+            ProposedFile stagedEmpty = null;
+            var leftMoniker = filePath;
+            if (!System.IO.File.Exists(filePath))
             {
-                // A brand new file: show an empty left side so the diff is still readable.
                 try
                 {
-                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(filePath) ?? ".");
-                    System.IO.File.WriteAllText(filePath, string.Empty, new System.Text.UTF8Encoding(false));
+                    stagedEmpty = new ProposedFile(filePath, string.Empty);
+                    leftMoniker = stagedEmpty.Path;
                 }
                 catch (Exception ex)
                 {
-                    return DiffOutcome.CouldNotPresent("cannot stage new file: " + ex.Message);
+                    return DiffOutcome.CouldNotPresent("cannot stage an empty left side: " + ex.Message);
                 }
             }
 
-            using (var proposed = new ProposedFile(filePath, newContents))
+            try
             {
-                var caption = System.IO.Path.GetFileName(filePath) + " — DeepSeek Harness proposed change";
-
-                IVsWindowFrame frame;
-                try
+                using (var proposed = new ProposedFile(filePath, newContents))
                 {
-                    // roles: left = the real file, right = the proposed content. Labels show
-                    // up on the two panes so the direction is never ambiguous.
-                    frame = differenceService.OpenComparisonWindow2(
-                        leftFileMoniker: filePath,
-                        rightFileMoniker: proposed.Path,
-                        caption: caption,
-                        Tooltip: "Accept to write the change, Reject to send it back to the model",
-                        leftLabel: "Current (on disk)",
-                        rightLabel: "Proposed (DeepSeek Harness)",
-                        inlineLabel: null,
-                        roles: null,
-                        grfDiffOptions: 0);
-                }
-                catch (Exception ex)
-                {
-                    _log("OpenComparisonWindow2 failed: " + ex);
-                    return DiffOutcome.CouldNotPresent(ex.Message);
-                }
+                    var caption = System.IO.Path.GetFileName(filePath) + " — DeepSeek Harness proposed change";
 
-                if (frame == null)
-                    return DiffOutcome.CouldNotPresent("diff window was not created");
+                    IVsWindowFrame frame;
+                    try
+                    {
+                        // roles: left = the real file, right = the proposed content. Labels show
+                        // up on the two panes so the direction is never ambiguous.
+                        frame = differenceService.OpenComparisonWindow2(
+                            leftFileMoniker: leftMoniker,
+                            rightFileMoniker: proposed.Path,
+                            caption: caption,
+                            Tooltip: "Accept to write the change, Reject to send it back to the model",
+                            leftLabel: "Current (on disk)",
+                            rightLabel: "Proposed (DeepSeek Harness)",
+                            inlineLabel: null,
+                            roles: null,
+                            grfDiffOptions: 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log("OpenComparisonWindow2 failed: " + ex);
+                        return DiffOutcome.CouldNotPresent(ex.Message);
+                    }
 
-                try { frame.Show(); }
-                catch (Exception ex) { _log("diff frame Show failed: " + ex); }
+                    if (frame == null)
+                        return DiffOutcome.CouldNotPresent("diff window was not created");
 
-                try
-                {
-                    var decision = await DecisionDialog.ShowAsync(filePath).ConfigureAwait(true);
-                    return decision;
+                    try { frame.Show(); }
+                    catch (Exception ex) { _log("diff frame Show failed: " + ex); }
+
+                    try
+                    {
+                        var decision = await DecisionDialog.ShowAsync(filePath).ConfigureAwait(true);
+                        return decision;
+                    }
+                    finally
+                    {
+                        // Leave no stale diff tab behind, whatever the user chose.
+                        try { frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave); }
+                        catch (Exception ex) { _log("CloseFrame failed: " + ex); }
+                    }
                 }
-                finally
-                {
-                    // Leave no stale diff tab behind, whatever the user chose.
-                    try { frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave); }
-                    catch (Exception ex) { _log("CloseFrame failed: " + ex); }
-                }
+            }
+            finally
+            {
+                if (stagedEmpty != null) stagedEmpty.Dispose();
             }
         }
     }

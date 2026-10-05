@@ -39,6 +39,7 @@ namespace DeepSeekHarness.VS
         private const int CmdStartSessionContext = 0x0101;
         private const int CmdStatus = 0x0102;
         private const int CmdOpenLog = 0x0103;
+        private const int CmdRemove = 0x0104;
 
         private static readonly string LogPath =
             Path.Combine(BridgeInstaller.RootDirectory, "vs-extension.log");
@@ -312,7 +313,14 @@ namespace DeepSeekHarness.VS
         {
             var menuCommandService = GetService(typeof(System.ComponentModel.Design.IMenuCommandService))
                 as System.ComponentModel.Design.IMenuCommandService;
-            if (menuCommandService == null) return;
+            if (menuCommandService == null)
+            {
+                // The menu entries come from the VSCT and stay visible either way, so without
+                // this line the user clicks a command that does nothing and the log - the one
+                // artifact a bug report carries - says nothing about why.
+                Log("IMenuCommandService unavailable; no commands were registered");
+                return;
+            }
 
             var commandSet = new Guid(CommandSetGuidString);
 
@@ -331,6 +339,65 @@ namespace DeepSeekHarness.VS
             menuCommandService.AddCommand(new MenuCommand(
                 (_, __) => OpenLog(),
                 new CommandID(commandSet, CmdOpenLog)));
+
+            menuCommandService.AddCommand(new MenuCommand(
+                (_, __) => RemoveEverything(),
+                new CommandID(commandSet, CmdRemove)));
+        }
+
+        /// <summary>
+        /// Deletes everything this extension installed outside the VSIX.
+        /// </summary>
+        /// <remarks>
+        /// VSIX uninstall cannot run extension code, so the hook script, its DeepSeek Harness
+        /// configuration, the launcher and the log all survive it - and the hook script is
+        /// executed by DeepSeek Harness with the user's own rights. Confirming first, because
+        /// this is the one irreversible thing the extension does.
+        /// </remarks>
+        private void RemoveEverything()
+        {
+            try
+            {
+                var root = BridgeInstaller.RootDirectory;
+                if (!System.IO.Directory.Exists(root))
+                {
+                    VsShellUtilities.ShowMessageBox(this,
+                        "Nothing to remove. The extension's folder does not exist:\n\n" + root,
+                        "DeepSeek Harness", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+                    return;
+                }
+
+                var answer = VsShellUtilities.ShowMessageBox(this,
+                    "Delete the files this extension installed?\n\n" + root +
+                    "\n\nThis removes the permission hook, its DeepSeek Harness configuration and the launcher.\n" +
+                    "Sessions started from that launcher stop being gated. Uninstalling the VSIX does NOT do this.",
+                    "DeepSeek Harness", OLEMSGICON.OLEMSGICON_WARNING,
+                    OLEMSGBUTTON.OLEMSGBUTTON_YESNO, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_SECOND);
+
+                if (answer != 6) // IDYES
+                {
+                    Log("remove everything: cancelled by the user");
+                    return;
+                }
+
+                // The bridge is writing a lock file into this tree, so stop it first.
+                try { _server?.Dispose(); } catch { }
+                try { _lock?.Delete(BridgeLock.DefaultDirectory); } catch { }
+
+                System.IO.Directory.Delete(root, true);
+                Log("removed " + root);
+                VsShellUtilities.ShowMessageBox(this,
+                    "Removed:\n\n" + root +
+                    "\n\nUninstall the extension itself from Extensions > Manage Extensions when you want it gone.",
+                    "DeepSeek Harness", OLEMSGICON.OLEMSGICON_INFO, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
+            catch (Exception ex)
+            {
+                Log("remove everything failed: " + ex);
+                VsShellUtilities.ShowMessageBox(this,
+                    "Could not remove the folder:\n\n" + ex.Message + "\n\nSee the log for details.",
+                    "DeepSeek Harness", OLEMSGICON.OLEMSGICON_CRITICAL, OLEMSGBUTTON.OLEMSGBUTTON_OK, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+            }
         }
 
         /// <summary>
@@ -442,12 +509,34 @@ namespace DeepSeekHarness.VS
 
             if (folders.Count == 0)
             {
-                // No solution info: fall back to the process's working directory so the
-                // bridge still gates sessions started from the same place.
-                folders.Add(Directory.GetCurrentDirectory().TrimEnd('\\'));
+                // No solution. Do not fall back to Directory.GetCurrentDirectory(): for a
+                // devenv-hosted extension that is Visual Studio's own install folder (or
+                // wherever the shortcut started it), so the bridge would scope the agent's
+                // workspace to Program Files and open the session tab there. Use a directory
+                // that belongs to the user, and say which one was chosen.
+                var folder = SafeUserFolder();
+                folders.Add(folder);
+                Log("no solution or workspace folder; using " + folder + " as the workspace");
             }
 
             return folders;
+        }
+
+        /// <summary>
+        /// A directory that belongs to the user, for when the IDE reports no workspace.
+        /// </summary>
+        private static string SafeUserFolder()
+        {
+            try
+            {
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (!string.IsNullOrEmpty(profile) && Directory.Exists(profile))
+                    return profile.TrimEnd('\\');
+            }
+            catch (Exception) { }
+
+            // Last resort, and still not the IDE's own directory.
+            return Path.GetTempPath().TrimEnd('\\');
         }
 
         /// <summary>

@@ -68,13 +68,17 @@ namespace DeepSeekHarness.Bridge
 
             foreach (var file in Directory.GetFiles(directory, "*.lock"))
             {
+                // Catch-all on purpose. This runs as the first statement of bridge startup, so
+                // anything escaping it means no listener, no lock and no refreshed hook - the
+                // extension silently does nothing while the user believes the gate is armed.
+                // One unreadable lock file is not worth that: a lock that cannot be examined
+                // is left alone and simply loses discovery on the liveness probe.
                 try
                 {
                     var pid = ReadPid(File.ReadAllText(file));
                     if (pid > 0 && !ProcessExists(pid)) File.Delete(file);
                 }
-                catch (IOException) { }
-                catch (UnauthorizedAccessException) { }
+                catch (Exception) { }
             }
         }
 
@@ -84,8 +88,14 @@ namespace DeepSeekHarness.Bridge
             {
                 using (var p = System.Diagnostics.Process.GetProcessById(pid)) return !p.HasExited;
             }
-            catch (ArgumentException) { return false; }   // no such process
+            catch (ArgumentException) { return false; }        // no such process
             catch (InvalidOperationException) { return false; }
+            // HasExited throws Win32Exception ("Access is denied") for a process this one
+            // cannot open, such as a service. Treating that as "gone" would delete a live
+            // lock, and letting it escape would abort startup, so an unreadable process
+            // counts as alive: the liveness probe decides.
+            catch (System.ComponentModel.Win32Exception) { return true; }
+            catch (Exception) { return true; }
         }
 
         internal static int ReadPid(string json)

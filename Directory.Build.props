@@ -7,14 +7,18 @@
     ships with the VS Installer and is the supported way to locate an installation, and
     fall back to the conventional path. Override on the command line when needed:
 
-        msbuild /p:VsInstallRoot="D:\VisualStudioCommunity"
+        msbuild /p:VsInstallRoot="D:\VisualStudio"
   -->
   <PropertyGroup>
     <VswherePath Condition="'$(VswherePath)' == ''">$(ProgramFiles)\Microsoft Visual Studio\Installer\vswhere.exe</VswherePath>
     <VswherePath Condition="!Exists('$(VswherePath)')">$(ProgramFiles(x86))\Microsoft Visual Studio\Installer\vswhere.exe</VswherePath>
 
     <VsInstallRoot Condition="'$(VsInstallRoot)' == '' AND Exists('$(VswherePath)')">$([System.Diagnostics.Process]::Start(&quot;$(VswherePath)&quot;, &quot;-latest -products * -property installationPath&quot;).StandardOutput.ReadToEnd().Trim())</VsInstallRoot>
-    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">$(ProgramFiles)\Microsoft Visual Studio\2022\Community</VsInstallRoot>
+    <!-- No guessed fallback. Baking in a year, an edition and the system drive produced
+         unresolved HintPath errors instead of "Visual Studio not found", and it shipped one
+         machine's layout in the source. The check itself is a target below, because an Error
+         element is not valid directly inside a props file. -->
+    <VsInstallRootLooksValid Condition="Exists('$(VsInstallRoot)\Common7\IDE\devenv.exe')">true</VsInstallRootLooksValid>
 
     <!-- PublicAssemblies carries the interop and shell contracts this extension compiles against. -->
     <VsPublicAssemblies>$(VsInstallRoot)\Common7\IDE\PublicAssemblies</VsPublicAssemblies>
@@ -26,7 +30,11 @@
     <!-- Visual Studio's terminal host contract (ConPTY-backed). Used to start a
          DeepSeek Harness session in a real VS terminal tab. -->
     <VsTerminalAssembly>$(VsInstallRoot)\Common7\IDE\CommonExtensions\Microsoft\Terminal\Microsoft.VisualStudio.Terminal.dll</VsTerminalAssembly>
-    <VsThreadingAssembly>$(VsInstallRoot)\MSBuild\Microsoft\VisualStudio\v18.0\VSSDK\Microsoft.VisualStudio.Threading.dll</VsThreadingAssembly>
+    <!-- The "v18.0" segment is the VS major version. It follows $(VisualStudioVersion) so a
+         build on VS 2022 looks in v17.0 instead of failing to resolve the reference. -->
+    <VsSdkVersionFolder Condition="'$(VsSdkVersionFolder)' == '' AND '$(VisualStudioVersion)' != ''">v$(VisualStudioVersion)</VsSdkVersionFolder>
+    <VsSdkVersionFolder Condition="'$(VsSdkVersionFolder)' == ''">v18.0</VsSdkVersionFolder>
+    <VsThreadingAssembly>$(VsInstallRoot)\MSBuild\Microsoft\VisualStudio\$(VsSdkVersionFolder)\VSSDK\Microsoft.VisualStudio.Threading.dll</VsThreadingAssembly>
   </PropertyGroup>
 
   <!-- One target framework for every project, matching the VS 2026 VSIX project
@@ -42,5 +50,12 @@
   <PropertyGroup>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+
+  <!-- Fails with a readable message instead of a pile of unresolved HintPath errors when
+       Visual Studio could not be located. -->
+  <Target Name="VerifyVsInstallRoot" BeforeTargets="ResolveAssemblyReferences;CoreCompile">
+    <Error Condition="'$(VsInstallRootLooksValid)' != 'true'"
+           Text="Visual Studio not found (looked for devenv.exe under '$(VsInstallRoot)'). Install vswhere - it ships with the Visual Studio Installer - or pass /p:VsInstallRoot=&lt;path&gt;." />
+  </Target>
 
 </Project>

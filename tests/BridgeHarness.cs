@@ -38,21 +38,26 @@ internal sealed class FakeTool : IIdeTool
 
 internal static class Harness
 {
-    private static int Main()
+    private static int Main(string[] args)
     {
+        // The workspace root comes from the command line: hardcoding one machine's layout
+        // meant the harness passed while proving nothing about path matching on anyone
+        // else's disk, and reported a workspace that does not exist for them.
+        var workspaceRoot = args != null && args.Length > 0 ? args[0] : Environment.CurrentDirectory;
+
         var tools = new IIdeTool[]
         {
             new FakeTool(
                 "get_environment",
                 "Reports which IDE and workspace the bridge is attached to.",
-                "Visual Studio harness\r\nworkspace: D:\\WorkProject\\Unity\\Move&Jump\r\nfile: PlayerController2D.cs"),
+                "Visual Studio harness\r\nworkspace: " + workspaceRoot + "\r\nfile: Example.cs"),
             new FakeTool(
                 "get_current_selection",
                 "Returns the text currently selected in the editor.",
-                "PlayerController2D.cs lines 32-35:\r\n[Header(\"horizontal move\")]")
+                "Example.cs lines 32-35:\r\n[Header(\"horizontal move\")]")
         };
 
-        var matcher = new PathWorkspaceMatcher(new[] { "D:\\WorkProject" });
+        var matcher = new PathWorkspaceMatcher(new[] { workspaceRoot });
         var server = new BridgeServer(matcher, delegate(string message) { Console.Error.WriteLine("[bridge] " + message); });
 
         server.ToolProvider = delegate { return tools; };

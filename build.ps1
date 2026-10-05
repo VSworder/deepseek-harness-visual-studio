@@ -41,10 +41,27 @@ Write-Host "Visual Studio : $vsRoot"
 $msbuild = Join-Path $vsRoot 'MSBuild\Current\Bin\MSBuild.exe'
 if (-not (Test-Path $msbuild)) { throw "MSBuild not found at $msbuild" }
 
-# The VSIX packaging targets live in the VS install; without the workload the build
-# fails with a missing Microsoft.VsSDK.targets, so check early and say why.
-$vsSdkTargets = Join-Path $vsRoot 'MSBuild\Microsoft\VisualStudio\v18.0\VSSDK\Microsoft.VsSDK.targets'
-if (-not (Test-Path $vsSdkTargets)) {
+# The VSIX packaging targets live in the VS install; without the workload the build fails
+# with a missing Microsoft.VsSDK.targets, so check early and say why.
+#
+# The "v18.0" folder is the VS major version, and the extension supports 17.14 upwards, so
+# it is discovered rather than assumed: hardcoding it made the build fail on VS 2022 with a
+# message telling the user to install a workload they already had.
+function Find-VsSdkTargets {
+    param([string] $Root)
+
+    $base = Join-Path $Root 'MSBuild\Microsoft\VisualStudio'
+    if (-not (Test-Path $base)) { return $null }
+
+    Get-ChildItem $base -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName 'VSSDK\Microsoft.VsSDK.targets' } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+}
+
+$vsSdkTargets = Find-VsSdkTargets -Root $vsRoot
+if (-not $vsSdkTargets) {
     Write-Warning "Microsoft.VsSDK.targets not found. Install the 'Visual Studio extension development' workload."
 }
 
@@ -56,6 +73,9 @@ New-Item -ItemType Directory -Force -Path $env:DOTNET_CLI_HOME, $env:NUGET_PACKA
 
 $project = Join-Path $repoRoot 'src\DeepSeekHarness.Vsix\DeepSeekHarness.Vsix.csproj'
 
+# Recorded before the build so the packaged file can be required to be newer.
+$buildStarted = Get-Date
+
 Write-Host "`n==> Restoring" -ForegroundColor Cyan
 & $msbuild $project /t:Restore /p:Configuration=$Configuration /v:minimal /nologo
 if ($LASTEXITCODE -ne 0) { throw "Restore failed." }
@@ -64,10 +84,14 @@ Write-Host "`n==> Building and packaging" -ForegroundColor Cyan
 & $msbuild $project /p:Configuration=$Configuration /v:minimal /nologo
 if ($LASTEXITCODE -ne 0) { throw "Build failed." }
 
+# Only a .vsix this run wrote counts. Picking the newest file in artifacts also picks up a
+# previous build when packaging was skipped (an up-to-date check, or a dropped targets
+# import), and the user then ships and debugs the old package believing it is the new one.
 $vsix = Get-ChildItem (Join-Path $repoRoot 'artifacts') -Filter '*.vsix' -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -ge $buildStarted } |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-if (-not $vsix) { throw "Build reported success but no .vsix was produced." }
+if (-not $vsix) { throw "Build reported success but no .vsix was produced or updated." }
 Write-Host "`nVSIX: $($vsix.FullName)  ($([math]::Round($vsix.Length / 1KB)) KB)" -ForegroundColor Green
 
 if ($Install) {
@@ -76,7 +100,12 @@ if ($Install) {
     if (-not (Test-Path $vsixInstaller)) { throw "VSIXInstaller.exe not found at $vsixInstaller" }
 
     # Quiet install; the installer needs elevation to write into the VS install folder.
+    # The exit code is checked, not printed: VSIXInstaller returns non-zero for the cases a
+    # user actually hits (already installed, blocked, needs elevation), and announcing
+    # success regardless sent them to restart Visual Studio and find no menu.
     & $vsixInstaller /quiet $vsix.FullName
-    Write-Host "Install exit code: $LASTEXITCODE" -ForegroundColor Green
-    Write-Host "Restart Visual Studio to load the extension."
+    if ($LASTEXITCODE -ne 0) {
+        throw "VSIXInstaller failed with exit code $LASTEXITCODE. The extension was not installed."
+    }
+    Write-Host "Installed. Restart Visual Studio to load the extension." -ForegroundColor Green
 }
