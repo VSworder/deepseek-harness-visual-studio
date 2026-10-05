@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <!--
+    Command surface for the extension.
+
+    Two commands, both reachable from Tools and from the editor's context menu:
+      - Start session: opens a terminal running the gated DeepSeek Harness profile.
+      - Status: reports whether the gate is actually armed, without starting anything.
+
+    The status command exists because every failure mode here is quiet: a profile that
+    cannot load the hook still runs, so the only honest answer to "is this working?"
+    comes from inspecting the installation, not from the session's behaviour.
+  -->
+
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidDeepSeekHarnessPackage">
+
+    <Menus>
+      <Menu guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessSubMenu" priority="0x700" type="Menu">
+        <Parent guid="guidSHLMainMenu" id="IDG_VS_MM_TOOLSADDINS" />
+        <Strings>
+          <ButtonText>DeepSeek Harness</ButtonText>
+          <CommandName>DeepSeek Harness</CommandName>
+        </Strings>
+      </Menu>
+    </Menus>
+
+    <Groups>
+      <Group guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" priority="0x0600">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessSubMenu" />
+      </Group>
+      <Group guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessContextGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_CODEWIN" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidDeepSeekHarnessCmdSet" id="cmdStartSession" priority="0x0100" type="Button">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
+        <Icon guid="guidImages" id="bmpLogo" />
+        <Strings>
+          <ButtonText>Start session</ButtonText>
+          <CommandName>Start session</CommandName>
+          <ToolTipText>Open a terminal running DeepSeek Harness with the diff gate armed</ToolTipText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidDeepSeekHarnessCmdSet" id="cmdStatus" priority="0x0200" type="Button">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
+        <Strings>
+          <ButtonText>Status…</ButtonText>
+          <CommandName>Status</CommandName>
+          <ToolTipText>Report whether the diff gate is armed, and where to look when it is not</ToolTipText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidDeepSeekHarnessCmdSet" id="cmdStartSessionContext" priority="0x0300" type="Button">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessContextGroup" />
+        <Strings>
+          <ButtonText>Start DeepSeek Harness session</ButtonText>
+          <CommandName>Start session</CommandName>
+        </Strings>
+      </Button>
+
+      <Button guid="guidDeepSeekHarnessCmdSet" id="cmdOpenLog" priority="0x0400" type="Button">
+        <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
+        <Strings>
+          <ButtonText>Open log</ButtonText>
+          <CommandName>Open log</CommandName>
+          <ToolTipText>Open the extension log in the editor</ToolTipText>
+        </Strings>
+      </Button>
+    </Buttons>
+
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidDeepSeekHarnessPackage" value="{8f2c1d94-7b3e-4a51-9d6f-2c4b8e0a1f37}" />
+
+    <GuidSymbol name="guidDeepSeekHarnessCmdSet" value="{5c1f4d20-9a83-4e77-b6d2-1f0e8a3c7b94}">
+      <IDSymbol name="DeepSeekHarnessSubMenu" value="0x1000" />
+      <IDSymbol name="DeepSeekHarnessGroup" value="0x1010" />
+      <IDSymbol name="DeepSeekHarnessContextGroup" value="0x1020" />
+      <IDSymbol name="cmdStartSession" value="0x0100" />
+      <IDSymbol name="cmdStartSessionContext" value="0x0101" />
+      <IDSymbol name="cmdStatus" value="0x0102" />
+      <IDSymbol name="cmdOpenLog" value="0x0103" />
+    </GuidSymbol>
+
+    <!--
+      No bitmap ships yet; the ids are declared so the buttons can carry icons later
+      without touching the menu layout.
+    -->
+    <GuidSymbol name="guidImages" value="{2b7e5a91-6c44-4d18-8f3a-9e5b1c7d0a62}">
+      <IDSymbol name="bmpLogo" value="1" />
+    </GuidSymbol>
+  </Symbols>
+
+</CommandTable>

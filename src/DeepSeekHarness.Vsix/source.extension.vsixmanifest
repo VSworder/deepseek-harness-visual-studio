@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+                xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="DeepSeekHarness.VisualStudio" Version="0.1.0" Language="en-US" Publisher="DeepSeekHarness" />
+    <DisplayName>DeepSeek Harness</DisplayName>
+    <Description xml:space="preserve">Review DeepSeek Harness file edits in Visual Studio's native diff window before they touch disk.
+
+DeepSeek Harness (dsh) is a terminal agent. This extension gives it the one thing a terminal cannot: a real diff. When the agent wants to change a file, the diff opens beside your code 鈥?left is what is on disk, right is what the model proposes 鈥?and a small prompt offers Accept or Reject. Nothing is written until you accept, and a rejection can carry an explanation that goes straight back to the model.
+
+Setup is just the VSIX. The extension installs the hook DeepSeek Harness needs, advertises itself through a loopback lock file, and the hook goes away when you uninstall. No YAML editing, no scripts to copy into your repository.
+
+Requires the DeepSeek Harness CLI (dsh) with the dsh-tui profile.</Description>
+    <MoreInfo>https://github.com/</MoreInfo>
+    <License>LICENSE.txt</License>
+    <Tags>deepseek, dsh, agent, ai, diff, llm, coding assistant</Tags>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14,19.0)">
+      <ProductArchitecture>amd64</ProductArchitecture>
+    </InstallationTarget>
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.7.2,)" />
+  </Dependencies>
+  <Prerequisites>
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.14,19.0)" DisplayName="Visual Studio core editor" />
+  </Prerequisites>
+  <Assets>
+    <!-- PkgdefProjectOutputGroup is what the VSSDK generates from the package's
+         [Guid] and registration attributes; the template uses the same asset. -->
+    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="File" Path="DeepSeekHarness.pkgdef" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="File" Path="DeepSeekHarness.VS.dll" />
+  </Assets>
+</PackageManifest>

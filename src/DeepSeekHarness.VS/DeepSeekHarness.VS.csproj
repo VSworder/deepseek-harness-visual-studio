@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>DeepSeekHarness.VS</AssemblyName>
+    <RootNamespace>DeepSeekHarness.VS</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <!-- The VSIX manifest references this project's pkgdef output, so package
+         registration must be generated here. -->
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+
+    <!-- The BuildTools package ships its targets under tools\VSSDK but does not import
+         them for SDK-style projects; the shipped VSIX template sets this switch, and the
+         explicit import at the bottom of this file does the rest. -->
+    <VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+
+    <!-- Packaging lives in DeepSeekHarness.Vsix; this project only needs the VSCT
+         compiler and pkgdef generation from the VSSDK targets. -->
+    <CreateVsixContainer>false</CreateVsixContainer>
+    <DeployExtension>false</DeployExtension>
+    <CopyVsixManifestToOutput>false</CopyVsixManifestToOutput>
+
+    <!-- VsInstallRoot / VsPublicAssemblies / VsThreadingAssembly / VsTerminalAssembly
+         come from Directory.Build.props, resolved with vswhere. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Supplies the VSCT compiler (VSCTCompile to .cto) and pkgdef generation. Without
+         it the command table is silently skipped and no menu appears. -->
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.9.820">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.VisualStudio.Shell.15.0">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Shell.15.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Shell.Framework">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Shell.Framework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Interop">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Interop.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Shell.Interop.8.0">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Shell.Interop.8.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Shell.Interop.9.0">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Shell.Interop.9.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Shell.Interop.11.0">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.Shell.Interop.11.0.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.TextManager.Interop">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.TextManager.Interop.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.OLE.Interop">
+      <HintPath>$(VsPublicAssemblies)\Microsoft.VisualStudio.OLE.Interop.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Terminal">
+      <HintPath>$(VsTerminalAssembly)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Threading">
+      <HintPath>$(VsThreadingAssembly)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Design" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Command table: compiled into the embedded .cto resource that
+         ProvideMenuResource("Menus.ctmenu") resolves. -->
+    <VSCTCompile Include="DeepSeekHarness.vsct">
+      <ResourceName>Menus.ctmenu</ResourceName>
+    </VSCTCompile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSeekHarness.Bridge\DeepSeekHarness.Bridge.csproj" />
+    <ProjectReference Include="..\DeepSeekHarness.Setup\DeepSeekHarness.Setup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shipped inside the VSIX and written to disk by the installer at first run. -->
+    <EmbeddedResource Include="..\..\scripts\vs-permission-hook.ps1" Link="Resources\vs-permission-hook.ps1" />
+  </ItemGroup>
+
+  <Import Project="$(NuGetPackageRoot)microsoft.vssdk.buildtools\18.9.820\tools\VSSDK\Microsoft.VsSDK.targets"
+          Condition="Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\18.9.820\tools\VSSDK\Microsoft.VsSDK.targets')" />
+
+</Project>

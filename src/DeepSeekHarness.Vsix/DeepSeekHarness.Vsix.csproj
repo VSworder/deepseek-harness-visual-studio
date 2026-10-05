@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Packaging project. Follows the Visual Studio 2026 VSIX project template
+    (Common7\IDE\ProjectTemplates\CSharp\Extensibility): an SDK-style project with the
+    VSSDK BuildTools package, letting its targets drive pkgdef generation and container
+    creation instead of hand-feeding the packager.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- The two switches the shipped VSIX template sets. -->
+    <VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+    <!-- This project has no assembly of its own, so it must not try to generate a
+         pkgdef; DeepSeekHarness.VS owns that and the manifest points at its output. -->
+    <GeneratePkgDefFile>false</GeneratePkgDefFile>
+    <CreateVsixContainer>true</CreateVsixContainer>
+
+    <!-- This project has no code of its own; the referenced projects declare what ships. -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IncludeAssemblyInVSIXContainer>false</IncludeAssemblyInVSIXContainer>
+    <IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+    <IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
+    <DeployExtension>false</DeployExtension>
+    <CopyBuildOutputToOutputDirectory>false</CopyBuildOutputToOutputDirectory>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <OutputPath>..\..\artifacts\</OutputPath>
+
+    <!-- Name the artifact after the extension, not after this packaging project. -->
+    <TargetName>DeepSeekHarness.VisualStudio</TargetName>
+    <AssemblyName>DeepSeekHarness.VisualStudio</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectCapability Include="CreateVsixContainer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.9.820" />
+  </ItemGroup>
+
+  <!-- Build the product projects for their outputs, but collect the payload by path:
+       an SDK-style packaging project cannot use the VSSDK project output groups. -->
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSeekHarness.VS\DeepSeekHarness.VS.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DeepSeekHarness.Bridge\DeepSeekHarness.Bridge.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DeepSeekHarness.Setup\DeepSeekHarness.Setup.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <VSIXSourceItem Include="$(MSBuildProjectDirectory)\source.extension.vsixmanifest" />
+        <!-- The VSSDK generates package registration from the [Guid] attribute; taking that
+         output is what keeps the CodeBase path, the autoload context GUID and the menu
+         resource entry correct. A hand-written pkgdef gets these wrong (measured: the
+         package fails to load with 0x80131047). -->
+    <VSIXSourceItem Include="$(MSBuildThisFileDirectory)..\DeepSeekHarness.VS\obj\$(Configuration)\DeepSeekHarness.VS.pkgdef">
+      <TargetPath>DeepSeekHarness.pkgdef</TargetPath>
+    </VSIXSourceItem>
+    <VSIXSourceItem Include="$(MSBuildProjectDirectory)\LICENSE.txt" />
+    <VSIXSourceItem Include="$(MSBuildThisFileDirectory)..\DeepSeekHarness.VS\bin\$(Configuration)\DeepSeekHarness.VS.dll" />
+    <VSIXSourceItem Include="$(MSBuildThisFileDirectory)..\DeepSeekHarness.Bridge\bin\$(Configuration)\DeepSeekHarness.Bridge.dll" />
+    <VSIXSourceItem Include="$(MSBuildThisFileDirectory)..\DeepSeekHarness.Setup\bin\$(Configuration)\DeepSeekHarness.Setup.dll" />
+  </ItemGroup>
+
+</Project>

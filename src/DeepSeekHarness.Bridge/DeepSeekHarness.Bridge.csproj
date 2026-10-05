@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>DeepSeekHarness.Bridge</AssemblyName>
+    <RootNamespace>DeepSeekHarness.Bridge</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <!-- The extension ships this assembly inside the VSIX; no NuGet dependencies,
+         so it also builds and unit-tests without Visual Studio present. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- The VSIX ships release assemblies only. -->
+    <DebugType>none</DebugType>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

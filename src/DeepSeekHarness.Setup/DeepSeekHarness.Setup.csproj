@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>DeepSeekHarness.Setup</AssemblyName>
+    <RootNamespace>DeepSeekHarness.Setup</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- The VSIX ships release assemblies only. -->
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+</Project>

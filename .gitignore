@@ -1,0 +1,12 @@
+# Build output
+artifacts/
+bin/
+obj/
+
+# NuGet caches, kept inside artifacts by build.ps1
+*.nupkg
+
+# Visual Studio
+.vs/
+*.user
+*.suo

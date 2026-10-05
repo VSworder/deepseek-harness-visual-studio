@@ -1,0 +1,46 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in this repository.
+
+    Visual Studio is not always on the system drive. We resolve it with vswhere, which
+    ships with the VS Installer and is the supported way to locate an installation, and
+    fall back to the conventional path. Override on the command line when needed:
+
+        msbuild /p:VsInstallRoot="D:\VisualStudioCommunity"
+  -->
+  <PropertyGroup>
+    <VswherePath Condition="'$(VswherePath)' == ''">$(ProgramFiles)\Microsoft Visual Studio\Installer\vswhere.exe</VswherePath>
+    <VswherePath Condition="!Exists('$(VswherePath)')">$(ProgramFiles(x86))\Microsoft Visual Studio\Installer\vswhere.exe</VswherePath>
+
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' AND Exists('$(VswherePath)')">$([System.Diagnostics.Process]::Start(&quot;$(VswherePath)&quot;, &quot;-latest -products * -property installationPath&quot;).StandardOutput.ReadToEnd().Trim())</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">$(ProgramFiles)\Microsoft Visual Studio\2022\Community</VsInstallRoot>
+
+    <!-- PublicAssemblies carries the interop and shell contracts this extension compiles against. -->
+    <VsPublicAssemblies>$(VsInstallRoot)\Common7\IDE\PublicAssemblies</VsPublicAssemblies>
+    <VsPrivateAssemblies>$(VsInstallRoot)\Common7\IDE\PrivateAssemblies</VsPrivateAssemblies>
+    <!-- Microsoft.VisualStudio.Threading is not in PublicAssemblies. The copy under
+         the VSSDK build folder is the .NET Framework build (it does not reference the
+         System.Runtime facade), unlike the 18.7 copy under VBCSharp which targets .NET 8
+         and cannot be referenced from a net48 extension. -->
+    <!-- Visual Studio's terminal host contract (ConPTY-backed). Used to start a
+         DeepSeek Harness session in a real VS terminal tab. -->
+    <VsTerminalAssembly>$(VsInstallRoot)\Common7\IDE\CommonExtensions\Microsoft\Terminal\Microsoft.VisualStudio.Terminal.dll</VsTerminalAssembly>
+    <VsThreadingAssembly>$(VsInstallRoot)\MSBuild\Microsoft\VisualStudio\v18.0\VSSDK\Microsoft.VisualStudio.Threading.dll</VsThreadingAssembly>
+  </PropertyGroup>
+
+  <!-- One target framework for every project, matching the VS 2026 VSIX project
+       template. Keep them in step: the packaging project must be able to reference
+       the product assemblies. -->
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <!-- Keep intermediate output out of the source tree where possible. -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>
