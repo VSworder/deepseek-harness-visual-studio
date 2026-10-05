@@ -119,7 +119,9 @@ namespace DeepSeekHarness.VS
             var rdt = _serviceProvider.GetService(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
 
             if (rdt == null)
-                return activePath == null ? "No documents are open." : "Active: " + activePath;
+                return activePath == null
+                    ? "No active document: " + (ActiveEditor.LastFailure ?? "unknown reason")
+                    : "Active: " + activePath;
 
             IEnumRunningDocuments enumerator;
             if (rdt.GetRunningDocumentsEnum(out enumerator) != 0 || enumerator == null)
@@ -217,42 +219,70 @@ namespace DeepSeekHarness.VS
 
             try
             {
-                var monitorSelection = serviceProvider.GetService(typeof(SVsShellMonitorSelection)) as IVsMonitorSelection;
-                if (monitorSelection == null) return null;
-
-                IntPtr framePointer;
-                uint itemId;
-                IVsMultiItemSelect multiSelect;
-                IntPtr selectionContainer;
-
-                if (monitorSelection.GetCurrentSelection(out framePointer, out itemId, out multiSelect, out selectionContainer) != 0)
+                var textManager = serviceProvider.GetService(typeof(SVsTextManager)) as IVsTextManager;
+                if (textManager == null)
+                {
+                    LastFailure = "SVsTextManager is unavailable to this package";
                     return null;
-
-                if (framePointer == IntPtr.Zero) return null;
-
-                IVsWindowFrame frame;
-                try
-                {
-                    frame = System.Runtime.InteropServices.Marshal.GetObjectForIUnknown(framePointer) as IVsWindowFrame;
-                }
-                finally
-                {
-                    System.Runtime.InteropServices.Marshal.Release(framePointer);
                 }
 
-                if (frame == null) return null;
+                // fMustHaveFocus = 0 is the whole point. The agent is told about a selection
+                // while the user is typing in the terminal, so the editor never has focus at
+                // the moment this runs. Asking for "the last active view" instead of "the
+                // focused view" is what makes the tool work at all; asking for focus returns
+                // the terminal's frame and no text view.
+                IVsTextView view;
+                var hr = textManager.GetActiveView(0, null, out view);
+                if (hr != 0 || view == null)
+                {
+                    LastFailure = "no active text view (0x" + hr.ToString("x8") +
+                                  "); open a file in the editor and click in it once";
+                    return null;
+                }
 
-                // The frame knows the file it is showing; the text view alone does not.
-                object pathValue;
-                if (frame.GetProperty((int)__VSFPROPID.VSFPROPID_pszMkDocument, out pathValue) == 0)
-                    filePath = pathValue as string;
+                filePath = ResolvePath(view);
+                LastFailure = null;
+                return view;
+            }
+            catch (Exception ex)
+            {
+                LastFailure = "resolution threw: " + ex.GetType().Name + ": " + ex.Message;
+                return null;
+            }
+        }
 
-                return VsShellUtilities.GetTextView(frame);
+        /// <summary>
+        /// File path behind a text view, or null. The view exposes its buffer, and the running
+        /// document table maps that buffer back to a moniker.
+        /// </summary>
+        private static string ResolvePath(IVsTextView view)
+        {
+            try
+            {
+                IVsTextLines buffer;
+                if (view.GetBuffer(out buffer) != 0 || buffer == null) return null;
+
+                var provider = buffer as IVsUserData;
+                if (provider == null) return null;
+
+                var key = typeof(IVsUserData).GUID;
+                object moniker;
+                if (provider.GetData(ref key, out moniker) != 0) return null;
+
+                return moniker as string;
             }
             catch (Exception)
             {
                 return null;
             }
         }
-    }
+        /// <summary>
+        /// Why the last <see cref="Find"/> returned nothing, for the tool to report.
+        /// </summary>
+        /// <remarks>
+        /// Added after both editor tools returned the same unhelpful "no active editor" text.
+        /// The resolution has four failure points and they need different fixes, so the tool
+        /// now says which one fired instead of collapsing them into one message.
+        /// </remarks>
+        public static string LastFailure { get; private set; }    }
 }
