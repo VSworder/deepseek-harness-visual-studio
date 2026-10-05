@@ -59,6 +59,8 @@ namespace DeepSeekHarness.VS
                 return null;
             }
 
+            DumpContract();
+
             var script = BridgeInstaller.StartScriptPath;
             if (!System.IO.File.Exists(script))
             {
@@ -86,24 +88,32 @@ namespace DeepSeekHarness.VS
 
             await DumpProfilesAsync(terminal, "after-register");
 
-            // Handing the profile to this call is what selects it. The service resolves a
-            // profile by id against its own list rather than trusting the object, which is
-            // why AddCachedProfile above is a prerequisite and not a nicety.
+            // This is the call that works, and the contract dump is why it was found:
+            // TerminalWindowOptions carries Name, Profile and WorkingDirectory - properties
+            // the decompiled IL did not show - and CreateTerminalWindowAsync is the entry
+            // point that honours them. Ten attempts used CreateTerminalAsync and never set
+            // Profile on the window options, so the service kept falling back to the default
+            // shell while every call reported success.
+            var options = new TerminalWindowOptions
+            {
+                Name = ProfileName,
+                Profile = profile,
+                WorkingDirectory = workingDirectory,
+                Focus = true,
+                AllowUserInput = true,
+                AutoResize = true
+            };
+
             try
             {
-                var id = await terminal.CreateTerminalAsync(
-                    cancellationToken,
-                    name: ProfileName,
-                    profile: (ITerminalProfile)profile,
-                    workingDirectory: workingDirectory).ConfigureAwait(true);
-
+                var id = await terminal.CreateTerminalWindowAsync(cancellationToken, options).ConfigureAwait(true);
                 _log("started terminal " + id + " with profile '" + ProfileName + "'");
                 WithdrawLater(terminal, profile, id);
                 return id;
             }
             catch (Exception ex)
             {
-                _log("CreateTerminalAsync with a profile failed: " + ex);
+                _log("CreateTerminalWindowAsync with options failed: " + ex);
             }
 
             // Last resort: a plain terminal, with the profile still registered so the user can
@@ -121,7 +131,6 @@ namespace DeepSeekHarness.VS
                 return null;
             }
         }
-
         /// <summary>
         /// Drops the cached profile once the terminal has settled.
         /// </summary>
@@ -175,6 +184,49 @@ namespace DeepSeekHarness.VS
             return config;
         }
 
+        /// <summary>
+        /// Logs the real property and method surface of the terminal contracts.
+        /// </summary>
+        /// <remarks>
+        /// Added because reasoning from decompiled IL kept producing a wrong picture of this
+        /// API. Reflection reports what the loaded assembly actually offers, including which
+        /// argument types each creation method accepts, and does it in one pass.
+        /// </remarks>
+        private void DumpContract()
+        {
+            var types = new[]
+            {
+                typeof(ITerminalService),
+                typeof(TerminalOptions),
+                typeof(TerminalWindowOptions),
+                typeof(ProfileConfig),
+                typeof(ITerminalProfile)
+            };
+
+            foreach (var type in types)
+            {
+                _log("contract: " + type.FullName);
+
+                foreach (var property in type.GetProperties())
+                    _log("  property " + property.PropertyType.Name + " " + property.Name +
+                         (property.CanWrite ? " {get;set;}" : " {get;}"));
+
+                foreach (var field in type.GetFields())
+                    _log("  field " + field.FieldType.Name + " " + field.Name);
+
+                if (type == typeof(ITerminalService) || type == typeof(IVsTerminalService))
+                {
+                    foreach (var method in type.GetMethods())
+                    {
+                        var parameters = new List<string>();
+                        foreach (var p in method.GetParameters())
+                            parameters.Add(p.ParameterType.Name + " " + p.Name + (p.IsOptional ? "?" : ""));
+                        _log("  method " + method.ReturnType.Name + " " + method.Name +
+                             "(" + string.Join(", ", parameters.ToArray()) + ")");
+                    }
+                }
+            }
+        }
         /// <summary>
         /// Logs every profile the service knows and which one it calls the default.
         /// </summary>
