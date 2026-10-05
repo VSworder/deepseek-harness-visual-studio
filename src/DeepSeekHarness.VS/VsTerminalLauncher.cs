@@ -24,7 +24,7 @@ namespace DeepSeekHarness.VS
     ///
     /// Two wrong turns worth recording. The <c>CreateTerminalAsync</c> overload taking a
     /// <c>ProfileConfig</c> ignores a profile the service has not seen and falls back to the
-    /// shell's default 閳?the tab takes the requested name and runs PowerShell. And the profile
+    /// shell's default 闁?the tab takes the requested name and runs PowerShell. And the profile
     /// has to be reachable under the overload taking an <see cref="ITerminalProfile"/>, which is
     /// why <c>AddCachedProfile</c> comes first.
     /// </remarks>
@@ -76,35 +76,9 @@ namespace DeepSeekHarness.VS
                 _log("could not register the terminal profile: " + ex.Message);
             }
 
-            // The window entry point is what honours the default profile; the overload taking
-            // a profile object is accepted but ignored, measured, so it is the fallback.
-            try
-            {
-                var id = await terminal.CreateTerminalWindowAsync(cancellationToken, null).ConfigureAwait(true);
-                _log("opened terminal window " + id);
-
-                // The profile only had to exist for that one selection. Withdrawing it keeps
-                // the promise that this extension adds nothing lasting: otherwise the user's
-                // own "new terminal" would keep opening DeepSeek Harness until a restart.
-                // The running terminal owns its pty already, so removing the cached entry
-                // does not disturb it.
-                try
-                {
-                    terminal.RemoveCachedProfile(profile);
-                    _log("withdrew the cached profile; the running session is unaffected");
-                }
-                catch (Exception ex)
-                {
-                    _log("could not withdraw the cached profile: " + ex.Message);
-                }
-
-                return id;
-            }
-            catch (Exception ex)
-            {
-                _log("CreateTerminalWindowAsync failed: " + ex);
-            }
-
+            // Handing the profile to this call is what selects it. The service resolves a
+            // profile by id against its own list rather than trusting the object, which is
+            // why AddCachedProfile above is a prerequisite and not a nicety.
             try
             {
                 var id = await terminal.CreateTerminalAsync(
@@ -113,7 +87,22 @@ namespace DeepSeekHarness.VS
                     profile: (ITerminalProfile)profile,
                     workingDirectory: workingDirectory).ConfigureAwait(true);
 
-                _log("fell back to CreateTerminalAsync; opened terminal " + id);
+                _log("started terminal " + id + " with profile '" + ProfileName + "'");
+                WithdrawLater(terminal, profile, id);
+                return id;
+            }
+            catch (Exception ex)
+            {
+                _log("CreateTerminalAsync with a profile failed: " + ex);
+            }
+
+            // Last resort: a plain terminal, with the profile still registered so the user can
+            // pick it from the dropdown. Better than nothing, and the log says what to do.
+            try
+            {
+                var id = await terminal.CreateTerminalWindowAsync(cancellationToken, null).ConfigureAwait(true);
+                _log("opened a plain terminal window (" + id + "); pick the '" + ProfileName +
+                     "' profile from the terminal dropdown to run the session");
                 return id;
             }
             catch (Exception ex)
@@ -123,6 +112,31 @@ namespace DeepSeekHarness.VS
             }
         }
 
+        /// <summary>
+        /// Drops the cached profile once the terminal has settled.
+        /// </summary>
+        /// <remarks>
+        /// Deferred rather than immediate: the launch call returns before the terminal has
+        /// finished resolving its profile, and withdrawing too early pulled the profile out
+        /// from under it - which looked exactly like selection silently falling back to
+        /// PowerShell. The delay is a compromise, not a guarantee: it keeps the extension
+        /// from leaving a permanent default behind, without racing the terminal's startup.
+        /// </remarks>
+        private void WithdrawLater(ITerminalService terminal, ProfileConfig profile, Guid id)
+        {
+            System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(20)).ContinueWith(delegate
+            {
+                try
+                {
+                    terminal.RemoveCachedProfile(profile);
+                    _log("withdrew the cached profile after terminal " + id + " started");
+                }
+                catch (Exception ex)
+                {
+                    _log("could not withdraw the cached profile: " + ex.Message);
+                }
+            }, System.Threading.Tasks.TaskScheduler.Default);
+        }
         /// <summary>
         /// The profile the terminal runs: cmd.exe executing the generated launch script.
         /// </summary>
@@ -138,13 +152,10 @@ namespace DeepSeekHarness.VS
                 displayName: ProfileName,
                 location: "cmd.exe",
                 arguments: "/k \"" + scriptPath + "\"",
-                // isDefault must be true. A non-default profile is exactly what the
-                // terminal service refuses to select on its own - which is why the first
-                // attempt opened a tab named "DeepSeek Harness" running PowerShell while
-                // picking the same profile from the dropdown worked. The cache is
-                // process-lifetime only, so this changes nothing after Visual Studio
-                // restarts, and it is the price of the service choosing our profile.
-                isDefault: true);
+                // Not the default. Selection here is explicit, by handing the profile to the
+                // launch call; marking it default would also redirect the user's own New
+                // Terminal, which this extension has no business doing.
+                isDefault: false);
 
             config.Id = ProfileId;
             return config;
