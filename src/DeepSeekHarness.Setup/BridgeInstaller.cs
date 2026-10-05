@@ -258,7 +258,7 @@ namespace DeepSeekHarness.Setup
             // whatever policy the user configured.
             return "- insert:\n" +
                    "    - id: hooks-vs-bridge\n" +
-                   "      name: '" + DshLocator.ToFileUrl(hooksPackage) + "'\n" +
+                   "      name: '" + (DshLocator.ToPackageEntryUrl(hooksPackage) ?? DshLocator.ToFileUrl(hooksPackage)) + "'\n" +
                    "      config:\n" +
                    "        configPath: '" + configPath + "'\n";
         }

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace DeepSeekHarness.Setup
 {
@@ -194,6 +195,86 @@ namespace DeepSeekHarness.Setup
         /// Nested <c>@scope</c> directories and spaces both survive the encoding.
         /// </remarks>
         public static string ToFileUrl(string path)
+        {
+            return ToFileUrlCore(path);
+        }
+
+        /// <summary>
+        /// URL for a package directory's module entry point, or null when it cannot be found.
+        /// </summary>
+        /// <remarks>
+        /// A URL naming a package DIRECTORY cannot be imported: Node answers
+        /// <c>ERR_UNSUPPORTED_DIR_IMPORT</c> because only bare specifiers get package
+        /// resolution. DSH logs the failure as "entry did not activate" and carries on, so a
+        /// directory URL made the permission hook silently absent while the MCP entry in the
+        /// same patch kept working. Measured both ways: directory URL - hook never ran;
+        /// entry-file URL - hook ran and the bridge received the request.
+        ///
+        /// The entry comes from the package's own manifest (<c>exports["."]</c>, else
+        /// <c>main</c>), not from an assumed filename.
+        /// </remarks>
+        public static string ToPackageEntryUrl(string packageDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(packageDirectory)) return null;
+
+            try
+            {
+                var manifest = Path.Combine(packageDirectory, "package.json");
+                if (!File.Exists(manifest)) return null;
+
+                var entry = ReadEntryPoint(File.ReadAllText(manifest));
+                if (string.IsNullOrEmpty(entry)) return null;
+
+                var full = Path.GetFullPath(Path.Combine(packageDirectory, entry.Replace('/', '\\')));
+                if (!File.Exists(full))
+                {
+                    // A manifest can point at a build output that is not present; without a
+                    // file there is nothing importable, and saying so beats a URL that fails
+                    // later with no explanation.
+                    return null;
+                }
+
+                return ToFileUrlCore(full);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The module entry point from a package manifest: the "." export when it has one,
+        /// otherwise "main". Handles both the string and the conditional forms of ".".
+        /// </summary>
+        private static string ReadEntryPoint(string manifestJson)
+        {
+            // Deliberately pattern-based rather than a JSON parser: the manifests involved are
+            // small, and this keeps the Setup assembly free of a parser dependency.
+            var exportsMatch = Regex.Match(manifestJson,
+                "\"exports\"\\s*:\\s*\\{(?<body>.*?)\\n\\s*\\}",
+                RegexOptions.Singleline);
+            if (exportsMatch.Success)
+            {
+                var body = exportsMatch.Groups["body"].Value;
+                var dotMatch = Regex.Match(body, "\"\\.\"\\s*:\\s*(?<value>\"[^\"]+\"|\\{)");
+                if (dotMatch.Success)
+                {
+                    var value = dotMatch.Groups["value"].Value;
+                    if (value.StartsWith("\"", StringComparison.Ordinal))
+                        return value.Trim('"');
+
+                    // Conditional form: prefer "default" (what Node actually imports).
+                    var afterDot = body.Substring(dotMatch.Index + dotMatch.Length);
+                    var defaultMatch = Regex.Match(afterDot, "\"default\"\\s*:\\s*\"(?<path>[^\"]+)\"");
+                    if (defaultMatch.Success) return defaultMatch.Groups["path"].Value;
+                }
+            }
+
+            var mainMatch = Regex.Match(manifestJson, "\"main\"\\s*:\\s*\"(?<path>[^\"]+)\"");
+            return mainMatch.Success ? mainMatch.Groups["path"].Value : null;
+        }
+
+        private static string ToFileUrlCore(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
 
