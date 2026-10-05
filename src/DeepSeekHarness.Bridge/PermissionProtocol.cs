@@ -8,14 +8,25 @@ namespace DeepSeekHarness.Bridge
     /// model wants to change.
     /// </summary>
     /// <remarks>
-    /// The hook reconstructs <see cref="NewContents"/> from the tool call (full file
-    /// contents for a write, or by applying old/new pairs for an edit) so the bridge
-    /// never has to know which tool produced the change.
+    /// The gate plugin reconstructs <see cref="NewContents"/> from the tool call (full file
+    /// contents for a write, or by applying old/new pairs for an edit, insert or create) so
+    /// the bridge never has to know which tool produced the change.
     /// </remarks>
     public sealed class PermissionRequest
     {
         /// <summary>Absolute path of the file the model wants to change.</summary>
         public string FilePath { get; set; }
+
+        /// <summary>
+        /// The file's content as the plugin read it, when it supplied one.
+        /// </summary>
+        /// <remarks>
+        /// Preferred over reading the file here: the plugin runs inside the session that is
+        /// about to write, so its read is the one the edit was computed against. A read on
+        /// this side could see a different revision and show the reviewer a diff against
+        /// something the tool never saw.
+        /// </remarks>
+        public string CurrentContents { get; set; }
 
         /// <summary>The complete proposed content, not a patch.</summary>
         public string NewContents { get; set; }

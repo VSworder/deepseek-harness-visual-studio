@@ -48,33 +48,37 @@ namespace DeepSeekHarness.VS
             return report.ToString();
         }
 
+        /// <summary>
+        /// Whether a file exists and is non-empty. A zero-byte plugin would load as an empty
+        /// module, which reports as installed and gates nothing.
+        /// </summary>
+        private static bool IsUsableFile(string path)
+        {
+            try { return File.Exists(path) && new FileInfo(path).Length > 0; }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
+        }
         /// <summary>Returns true when a gated session could actually be started.</summary>
         private bool ReportGate(StringBuilder report)
         {
             report.AppendLine("Diff gate");
 
-            var hooksPackage = DshLocator.FindHooksPackage();
             var tuiCommand = DshLocator.FindTuiCommand();
 
-            var hookScript = BridgeInstaller.HookScriptPath;
-            var hookSettings = BridgeInstaller.HookSettingsPath;
+            var pluginEntry = BridgeInstaller.PluginEntryPath;
             var patch = BridgeInstaller.HookPatchPath;
 
-            var hookScriptOk = File.Exists(hookScript);
-            var hookSettingsOk = File.Exists(hookSettings);
+            var pluginOk = IsUsableFile(pluginEntry);
             var patchOk = File.Exists(patch);
 
-            Line(report, "hook script", hookScriptOk ? hookScript : "MISSING");
-            Line(report, "hook config", hookSettingsOk ? hookSettings : "MISSING");
+            Line(report, "gate plugin", pluginOk ? pluginEntry : "MISSING");
             Line(report, "bridge patch", patchOk ? patch : "MISSING");
             report.AppendLine();
 
-            Line(report, "bridge package", hooksPackage ?? "NOT FOUND");
             Line(report, "tui launcher", tuiCommand ?? "NOT FOUND");
             Line(report, "dsh launcher", DshLocator.FindDshCommand() ?? "NOT FOUND");
 
-            var ready = hooksPackage != null && tuiCommand != null
-                        && hookScriptOk && hookSettingsOk && patchOk;
+            var ready = tuiCommand != null && pluginOk && patchOk;
 
             if (!ready)
             {
@@ -82,8 +86,8 @@ namespace DeepSeekHarness.VS
                 report.AppendLine("  A session started now would run WITHOUT the diff gate.");
                 report.AppendLine("  Fix what is missing above:");
                 report.AppendLine();
-                if (hooksPackage == null)
-                    report.AppendLine("      npm install -g @deepseek-ai/dsh");
+                if (!pluginOk)
+                    report.AppendLine("      restart Visual Studio to rewrite the gate plugin");
                 if (tuiCommand == null)
                     report.AppendLine("      npm install -g @deepseek-harness-tui/dsh-tui");
                 report.AppendLine("      then restart Visual Studio");

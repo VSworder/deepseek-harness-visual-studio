@@ -99,7 +99,8 @@
 
   <ItemGroup>
     <!-- Shipped inside the VSIX and written to disk by the installer at first run. -->
-    <EmbeddedResource Include="..\..\scripts\vs-permission-hook.ps1" Link="Resources\vs-permission-hook.ps1" />
+    <EmbeddedResource Include="..\DeepSeekHarness.DshPlugin\lib\index.js" Link="Resources\vs-gate-plugin.js" />
+    <EmbeddedResource Include="..\DeepSeekHarness.DshPlugin\package.json" Link="Resources\vs-gate-plugin.package.json" />
   </ItemGroup>
 
   <Import Project="$(NuGetPackageRoot)microsoft.vssdk.buildtools\18.9.820\tools\VSSDK\Microsoft.VsSDK.targets"

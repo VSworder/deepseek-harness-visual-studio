@@ -275,6 +275,7 @@ namespace DeepSeekHarness.Bridge
             return new PermissionRequest
             {
                 FilePath = ReadString(json, "filePath"),
+                CurrentContents = ReadString(json, "currentContents"),
                 NewContents = ReadString(json, "newContents"),
                 Cwd = ReadString(json, "cwd"),
                 PermissionMode = ReadString(json, "permissionMode"),

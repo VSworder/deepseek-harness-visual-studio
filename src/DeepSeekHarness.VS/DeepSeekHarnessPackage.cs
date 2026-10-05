@@ -112,25 +112,22 @@ namespace DeepSeekHarness.VS
         {
             try
             {
-                _install = ProfileWriter.Install(ReadEmbeddedHook(), _server.Port, _server.AuthToken);
+                _install = ProfileWriter.Install(ReadEmbeddedPlugin(), ReadEmbeddedPluginManifest(),
+                                                 _server.Port, _server.AuthToken);
 
-                Log("hook script  : " + _install.HookScriptPath);
-                Log("hook config  : " + _install.HookSettingsPath);
+                Log("gate plugin  : " + _install.PluginEntryPath);
                 Log("bridge patch : " + _install.PatchPath);
-
-
-                if (!_install.HooksPackageFound)
-                    Log("WARNING: the DeepSeek Harness hook bridge was not found. " +
-                        "Install the CLI with: npm install -g @deepseek-ai/dsh");
 
                 if (!_install.DshCommandFound)
                     Log("WARNING: dsh was not found on PATH; the extension cannot start a session.");
 
-                // Positive evidence only. A bridge that cannot load fails *silently*: the
-                // session still starts, the hook never runs, and edits are written without
-                // asking. So both halves are checked here rather than assumed.
-                if (!_install.HooksPackageFound)
-                    Log("GATE OFF: the hook bridge is not in the dsh installation");
+                // Positive evidence only. The failure this replaces was invisible: the session
+                // started, the gate was not mounted, and edits were written without asking
+                // while every log line looked healthy. Same reasoning as before, one check
+                // instead of two, because the plugin now ships inside the VSIX rather than
+                // being borrowed from the dsh installation.
+                if (!_install.PluginInstalled)
+                    Log("GATE OFF: the gate plugin was not written to disk");
 
                 if (!_install.TuiCommandFound)
                     Log("GATE OFF: dsh-tui was not found; install it with: " +
@@ -195,17 +192,42 @@ namespace DeepSeekHarness.VS
             return result;
         }
         /// <summary>
-        /// Reads the hook script embedded in this assembly, so the script version always
+        /// Reads the gate plugin embedded in this assembly, so the plugin version always
         /// travels with the extension that installed it.
         /// </summary>
-        private static string ReadEmbeddedHook()
+        private static string ReadEmbeddedPlugin()
+        {
+            return ReadEmbeddedText("vs-gate-plugin.js",
+                   "the gate plugin is missing from the VSIX; the diff gate cannot be armed");
+        }
+
+        /// <summary>
+        /// Reads the plugin's manifest, or returns null to let the installer generate one.
+        /// </summary>
+        private static string ReadEmbeddedPluginManifest()
+        {
+            try
+            {
+                return ReadEmbeddedText("vs-gate-plugin.package.json", null);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Reads a text resource by the suffix of its manifest name. The suffix is enough to
+        /// identify these files and keeps the lookup working if the folder layout changes.
+        /// </summary>
+        private static string ReadEmbeddedText(string nameSuffix, string missingMessage)
         {
             var assembly = Assembly.GetExecutingAssembly();
 
             string name = null;
             foreach (var candidate in assembly.GetManifestResourceNames())
             {
-                if (candidate.EndsWith("vs-permission-hook.ps1", StringComparison.OrdinalIgnoreCase))
+                if (candidate.EndsWith(nameSuffix, StringComparison.OrdinalIgnoreCase))
                 {
                     name = candidate;
                     break;
@@ -213,7 +235,10 @@ namespace DeepSeekHarness.VS
             }
 
             if (name == null)
-                throw new InvalidOperationException("embedded hook script not found in the VSIX");
+            {
+                if (missingMessage == null) throw new InvalidOperationException(nameSuffix + " not found");
+                throw new InvalidOperationException(missingMessage);
+            }
 
             using (var stream = assembly.GetManifestResourceStream(name))
             using (var reader = new StreamReader(stream, System.Text.Encoding.UTF8))
@@ -237,7 +262,7 @@ namespace DeepSeekHarness.VS
                     await JoinableTaskFactory.SwitchToMainThreadAsync();
 
                     var presenter = new VsDiffPresenter(this, Log);
-                    var outcome = await presenter.PresentAsync(request.FilePath, request.NewContents);
+                    var outcome = await presenter.PresentAsync(request.FilePath, request.CurrentContents, request.NewContents);
 
                     switch (outcome.Verdict)
                     {
@@ -449,9 +474,9 @@ namespace DeepSeekHarness.VS
         {
             var parts = new System.Collections.Generic.List<string>();
 
-            if (!_install.HooksPackageFound)
-                parts.Add("the DeepSeek Harness hook bridge is not in the dsh installation " +
-                          "(install the CLI: npm install -g @deepseek-ai/dsh)");
+            if (!_install.PluginInstalled)
+                parts.Add("the gate plugin was not written to disk " +
+                          "(" + BridgeInstaller.PluginEntryPath + ")");
 
             if (!_install.TuiCommandFound)
                 parts.Add("dsh-tui was not found on PATH " +

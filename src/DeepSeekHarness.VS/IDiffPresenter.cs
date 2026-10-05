@@ -17,11 +17,16 @@ namespace DeepSeekHarness.VS
     public interface IDiffPresenter
     {
         /// <summary>
-        /// Shows <paramref name="newContents"/> against the current file on disk and
+        /// Shows <paramref name="newContents"/> against the file's current content and
         /// returns the user's decision. Must not throw for user-driven outcomes;
         /// a failure to present should yield <see cref="DiffOutcome.CouldNotPresent"/>.
         /// </summary>
-        Task<DiffOutcome> PresentAsync(string filePath, string newContents);
+        /// <param name="filePath">Absolute path of the file being changed.</param>
+        /// <param name="currentContents">
+        /// The file's content as the gate plugin read it, or null to read it here.
+        /// </param>
+        /// <param name="newContents">The complete proposed content.</param>
+        Task<DiffOutcome> PresentAsync(string filePath, string currentContents, string newContents);
     }
 
     /// <summary>What the user did with a presented diff.</summary>

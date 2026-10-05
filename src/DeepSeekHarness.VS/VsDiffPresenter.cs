@@ -27,7 +27,7 @@ namespace DeepSeekHarness.VS
             _log = log ?? (_ => { });
         }
 
-        public async Task<DiffOutcome> PresentAsync(string filePath, string newContents)
+        public async Task<DiffOutcome> PresentAsync(string filePath, string currentContents, string newContents)
         {
             if (string.IsNullOrEmpty(filePath))
                 return DiffOutcome.CouldNotPresent("no file path");
@@ -42,19 +42,29 @@ namespace DeepSeekHarness.VS
             // proposed new file still left a zero-byte file and a new directory tree in the
             // user's repository. VS never creates a file just because a diff names it, so the
             // moniker does not have to exist on disk.
-            ProposedFile stagedEmpty = null;
+            // The left side is a file too, so the current content is staged rather than naming
+            // the real path. That matters twice over: the plugin's read is what the edit was
+            // computed against, so the diff cannot drift from the change, and a file that does
+            // not exist yet needs no placeholder at the real path - an earlier version created
+            // the target and its parent directories before asking, so rejecting a new file
+            // still left them behind.
+            ProposedFile stagedCurrent = null;
             var leftMoniker = filePath;
-            if (!System.IO.File.Exists(filePath))
+            try
             {
-                try
+                var left = currentContents;
+                if (left == null)
                 {
-                    stagedEmpty = new ProposedFile(filePath, string.Empty);
-                    leftMoniker = stagedEmpty.Path;
+                    left = System.IO.File.Exists(filePath)
+                        ? System.IO.File.ReadAllText(filePath, System.Text.Encoding.UTF8)
+                        : string.Empty;
                 }
-                catch (Exception ex)
-                {
-                    return DiffOutcome.CouldNotPresent("cannot stage an empty left side: " + ex.Message);
-                }
+                stagedCurrent = new ProposedFile(filePath, left);
+                leftMoniker = stagedCurrent.Path;
+            }
+            catch (Exception ex)
+            {
+                return DiffOutcome.CouldNotPresent("cannot stage the current content: " + ex.Message);
             }
 
             try
@@ -106,7 +116,7 @@ namespace DeepSeekHarness.VS
             }
             finally
             {
-                if (stagedEmpty != null) stagedEmpty.Dispose();
+                if (stagedCurrent != null) stagedCurrent.Dispose();
             }
         }
     }
