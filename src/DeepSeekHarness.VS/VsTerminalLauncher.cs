@@ -59,7 +59,11 @@ namespace DeepSeekHarness.VS
                 return null;
             }
 
-            DumpContract();
+            // The contract dump is verbose and only useful when something breaks, so it
+            // runs once per session and stays in the code: this extension leans on an IDE
+            // API that changes between Visual Studio versions, and the dump is what turns
+            // "it silently did nothing" into a list of what the API actually offers.
+            if (Environment.GetEnvironmentVariable("DSH_VS_DUMP_CONTRACT") == "1") DumpContract();
 
             var script = BridgeInstaller.StartScriptPath;
             if (!System.IO.File.Exists(script))

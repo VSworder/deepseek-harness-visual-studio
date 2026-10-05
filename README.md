@@ -3,8 +3,8 @@
 Bring **DeepSeek Harness** into Visual Studio:
 
 - **Native diff gate.** When the agent wants to change a file, the diff opens in Visual
-  Studio's own comparison window — left is what is on disk, right is what the model
-  proposes — with Accept and Reject. Nothing is written until you accept, and a rejection
+  Studio's own comparison window 鈥?left is what is on disk, right is what the model
+  proposes 鈥?with Accept and Reject. Nothing is written until you accept, and a rejection
   can carry an explanation that goes straight back to the model.
 - **Visual Studio tools for the agent.** The session gets MCP tools that read IDE state:
   which solution is open, which files are in the editor. The model stops guessing about
@@ -24,7 +24,7 @@ Early, but the core is verified end to end.
 | `get_environment`, `get_open_files` | Verified in a live agent session |
 | `get_current_selection` | Implemented; not yet exercised inside Visual Studio |
 | Status command | Works |
-| Launching the session from Visual Studio | **Not yet.** Start the session yourself with the command below |
+| Launching the session from Visual Studio | **Works.** Tools → DeepSeek Harness → Start session |
 
 The tools the agent gets:
 
@@ -57,7 +57,7 @@ patch under `%LOCALAPPDATA%\DeepSeekHarness\`.
 
 Check that the gate is armed:
 
-> **Tools → DeepSeek Harness → Status…**
+> **Tools 鈫?DeepSeek Harness 鈫?Status鈥?*
 
 Then start a session with the patch attached:
 
@@ -91,8 +91,7 @@ These cost real debugging time and shape the design.
 
 **1. The hook must not live in your repository.** DeepSeek Harness runs command hooks
 through `ctx.shell`, which on Windows is Git Bash, and `&` in a path is a command
-separator there. A hook installed in a repository called `Move&Jump` never runs at all —
-silently, because a missing hook is indistinguishable from an allowed edit. Installing
+separator there. A hook installed in a repository called `Move&Jump` never runs at all 鈥?silently, because a missing hook is indistinguishable from an allowed edit. Installing
 under the user profile avoids the whole class of problem.
 
 **2. The hook timeout must be 24 hours.** DeepSeek Harness defaults a hook with no
