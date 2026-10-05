@@ -1,0 +1,55 @@
+# Changelog
+
+## 0.1.0 — unreleased
+
+First working version. The diff gate, the Visual Studio tools and one-click session start all
+work; the gate is a plugin this repository owns.
+
+### The diff gate
+
+- **Edits are reviewed in Visual Studio's own comparison window.** Left is the file as the
+  gate plugin read it, right is the exact content the tool is about to write. Accept writes
+  it; Reject fails the tool call with your reason attached, which the model sees.
+- **Rejecting a new file creates nothing.** Not the file, not its parent directories. The
+  left-hand side is staged in the temp directory rather than at the target path.
+- **A missing bridge is not a silent allow.** The plugin answers `ask`, handing the call to
+  the harness's own permission flow. An earlier design failed open, which meant every edit
+  landed unreviewed and nothing said so.
+- **Reads are not gated**, and neither are `edit`s the harness itself would refuse — an
+  unmatched or ambiguous search shows no diff, because there is no change to review.
+
+### The Visual Studio tools
+
+Three read-only MCP tools: `get_environment`, `get_open_files`, `get_current_selection`. The
+last works while you are typing in the terminal, because it reads the text manager's last
+active view rather than the focused one, and falls back to the caret's line when nothing is
+selected.
+
+### Starting a session
+
+**Tools → DeepSeek Harness → Start session** opens a terminal tab running DeepSeek Harness
+with the gate attached, mounted through a profile the extension registers at runtime and
+withdraws once the terminal is up — your DeepSeek Harness profile is never modified.
+
+### Notes from building it
+
+Recorded because each of these cost real time and each failure was silent.
+
+- **A package directory cannot be imported.** Mounting the gate by a URL naming a package
+  directory makes Node answer `ERR_UNSUPPORTED_DIR_IMPORT`; the harness reports that as one
+  line, `entry did not activate`, and continues. The gate was absent while the MCP entry in
+  the same patch kept working, so the integration looked healthy. The plugin is mounted by
+  its entry *file*.
+- **Do not infer an API's shape from a decompiler.** A disassembly of
+  `Microsoft.VisualStudio.Terminal.dll` omitted `TerminalWindowOptions.Name`, `.Profile` and
+  `.WorkingDirectory` — inherited members — so several attempts passed a profile the terminal
+  service then ignored. A runtime reflection dump settled it in one run.
+- **"The call returned" is not "it worked".** Both of the above reported success. Where a
+  component can fail open, make it say so; where it cannot, check the effect rather than the
+  return value.
+- **Do not force a user's policy.** An early version wrote `policy: never` into the generated
+  patch, on a wrong assumption about patched sessions, which silently disabled an approval
+  policy the user had enabled.
+- **A plugin may only add.** The extension writes under `%LOCALAPPDATA%\DeepSeekHarness\` and
+  mounts from there. It does not edit the user's DeepSeek Harness profile, terminal defaults
+  or approval policy.

@@ -15,25 +15,32 @@ rewritten, and uninstalling leaves nothing behind but a folder under `%LOCALAPPD
 
 ## Status
 
-Early, but the core is verified end to end.
+Early, but every claim below has been checked somewhere specific, and the table says where.
 
 | Piece | State |
 | --- | --- |
-| Diff gate (plugin, `/permission`) | Works; verified against a real DeepSeek Harness session |
-| MCP endpoint | Works; verified with the same MCP client library DeepSeek Harness uses |
+| Diff gate, edit on an existing file | **Verified in Visual Studio.** Reject left the file untouched and the reason reached the model; Accept wrote it |
+| Diff gate, write of a new file | **Verified in Visual Studio.** Reject created nothing — no file, not even a zero-byte placeholder |
+| Reads are not gated | **Verified.** A read passes through without a diff |
+| MCP endpoint | Verified with the MCP client library the harness itself uses |
 | `get_environment`, `get_open_files` | Verified in a live agent session |
 | `get_current_selection` | Verified in a live session: with a selection, and with a bare caret |
+| Starting a session from Visual Studio | **Works.** Tools — DeepSeek Harness — Start session |
 | Status command | Works |
-| Launching the session from Visual Studio | **Works.** Tools -&gt;?DeepSeek Harness -&gt;?Start session |
+| `str_replace_editor` (create, insert, str_replace, view) | **Unit tests only.** The sessions used for the checks above did not have this tool mounted, so its four commands have never run against the gate |
 
-The tools the agent gets:
+The tool surface the agent gets:
 
-| Tool | Reads |
-| --- | --- |
-| `mcp__vs__get_environment` | solution path, workspace folder, process id |
-| `mcp__vs__get_open_files` | the files in the editor, with the active one marked |
-| `mcp__vs__get_current_selection` | the selected text, its file and line range |
+| Tool | Reads | Writes |
+| --- | --- | --- |
+| `mcp__vs__get_environment` | solution path, workspace folder, process id | nothing |
+| `mcp__vs__get_open_files` | the files in the editor, with the active one marked | nothing |
+| `mcp__vs__get_current_selection` | the selected text, its file and line range | nothing |
 
+All three are read-only. The gate is the only thing that can affect a file, and it affects
+nothing by itself — it shows a diff and returns your verdict.
+
+See [SECURITY.md](SECURITY.md) for what the bridge exposes and what it does not.
 ## Requirements
 
 - Visual Studio 2022 17.14 or newer (developed against Visual Studio 2026 18.10)
@@ -191,6 +198,15 @@ tests/
 `DeepSeekHarness.Bridge` deliberately has no Visual Studio dependency, so the protocol can
 be tested without an IDE in the loop. Most of the risk lives there, and
 `tests/BridgeHarness.cs` plus `tests/mcp-sdk-test.mjs` exercise it directly.
+
+## See also
+
+| Document | What it covers |
+| --- | --- |
+| [CHANGELOG.md](CHANGELOG.md) | What is in each release, and the mistakes worth not repeating |
+| [SECURITY.md](SECURITY.md) | What the bridge exposes, what the token is worth, and what the extension will not do |
+| [docs/testing.md](docs/testing.md) | The by-hand checklist for what automated tests cannot reach |
+| [docs/protocol.md](docs/protocol.md) | The `/permission` contract between the plugin and the extension |
 
 ## License
 
