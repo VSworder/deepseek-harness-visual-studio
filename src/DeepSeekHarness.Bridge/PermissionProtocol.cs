@@ -42,6 +42,17 @@ namespace DeepSeekHarness.Bridge
 
         /// <summary>The hook process id, so the bridge can tell sessions apart.</summary>
         public int Pid { get; set; }
+
+        /// <summary>
+        /// The harness call this proposal belongs to, when the plugin supplied one.
+        /// </summary>
+        /// <remarks>
+        /// Used to recognise the same call arriving twice. That happens when the gate is
+        /// mounted more than once - the extension mounts it, and the user may also have
+        /// installed it into their profile - and without this the reviewer would be shown
+        /// two diffs for one edit.
+        /// </remarks>
+        public string CallId { get; set; }
     }
 
     /// <summary>What the user decided in the diff window, or that the bridge declined to gate.</summary>

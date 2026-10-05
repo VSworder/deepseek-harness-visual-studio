@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const pluginUrl = pathToFileURL(join(here, '..', 'src', 'DeepSeekHarness.DshPlugin', 'lib', 'index.js')).href;
+const pluginUrl = pathToFileURL(join(here, '..', 'packages', 'dsh-plugin-vs-gate', 'lib', 'index.js')).href;
 
 const workDir = mkdtempSync(join(tmpdir(), 'vs-gate-test-'));
 
@@ -127,7 +127,10 @@ const listener = await loadListener();
   const path = fileWith('aaa\n');
   const r = await review(listener, 'edit', { file_path: path, old_string: 'zzz', new_string: 'yyy' });
   check('edit no match: bridge not asked', r.payload, null);
-  check('edit no match: asks the harness', r.decision.kind, 'ask');
+  // The harness refuses this edit itself - an unmatched old_string throws inside the tool
+  // - so there is no change to review and this plugin stays out of the way. Prompting here
+  // would ask the user about something that cannot happen.
+  check('edit no match: passes through', r.decision.kind, 'allow');
 }
 
 // --- an ambiguous edit, which the harness refuses without replace_all -------------
@@ -195,16 +198,98 @@ const listener = await loadListener();
   check('reject: reason carried', r.decision.reason, 'not this way');
 }
 
-// --- no bridge configured: must not silently allow --------------------------------
+// --- no bridge anywhere: the plugin has no opinion --------------------------------
+// Diverges from the extension-launched case on purpose. Installed standalone with no
+// Visual Studio open there is no window to route to, so the plugin stays out of the way
+// rather than prompting on every edit.
 {
   const path = fileWith('aaa\n');
   const decision = await listener(
     { name: 'edit', arguments: { file_path: path, old_string: 'aaa', new_string: 'bbb' }, callId: 'call-2', signal: undefined },
     async () => ({ kind: 'allow' })
   );
-  check('no bridge: asks instead of allowing', decision.kind, 'ask');
+  // The listener returns whatever `next()` gave it, so a pass-through looks like the
+  // harness's own allow. What matters is that this plugin contributed nothing: it did not
+  // deny, and it did not ask.
+  check('no bridge: stays out of the way', decision.kind, 'allow');
 }
 
+
+// --- discovery through lock files ------------------------------------------------
+// The standalone path: the plugin was installed with `dsh plugin add` and DeepSeek Harness
+// was started by the user, so there are no injected variables to read. Visual Studio is
+// found the way the extension advertises it.
+//
+// `review` above always injects the variables, so it cannot exercise this. These cases run
+// the listener with the environment clear and a lock file in place.
+{
+  const { mkdirSync, writeFileSync, unlinkSync, rmSync } = await import('node:fs');
+  const lockDir = join(process.env.LOCALAPPDATA, 'DeepSeekHarness', 'vs-bridge');
+  mkdirSync(lockDir, { recursive: true });
+
+  /**
+   * Runs one review with a lock file instead of injected variables, against a bridge on a
+   * real port so a request that is attempted can be observed.
+   */
+  async function reviewViaLock(lockContents, toolName, args) {
+    const received = [];
+    const server = createServer((req, res) => {
+      let raw = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => { raw += chunk; });
+      req.on('end', () => {
+        received.push(raw);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ accept: true }));
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+    const lockPath = join(lockDir, `dsh-gate-test-${server.address().port}.lock`);
+    writeFileSync(lockPath, lockContents(server.address().port), 'utf8');
+    delete process.env.DSH_VS_BRIDGE_PORT;
+    delete process.env.DSH_VS_BRIDGE_TOKEN;
+
+    let decision;
+    try {
+      decision = await listener(
+        { name: toolName, arguments: args, callId: 'call-lock', signal: undefined },
+        async () => ({ kind: 'allow' })
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+      try { unlinkSync(lockPath); } catch { /* already gone */ }
+      delete process.env.DSH_VS_BRIDGE_PORT;
+      delete process.env.DSH_VS_BRIDGE_TOKEN;
+    }
+    return { decision, payload: received.length > 0 ? JSON.parse(received[0]) : null };
+  }
+
+  // The extension writes these without a byte-order mark, but anything else writing UTF-8
+  // on Windows may add one, and JSON.parse rejects a BOM outright - so a lock that is
+  // perfectly good would be skipped in silence and nothing would be routed.
+  {
+    const path = fileWith('aaa\n');
+    const r = await reviewViaLock(
+      (port) => `\uFEFF${JSON.stringify({ port, authToken: 'tok', workspaceFolders: [workDir] })}`,
+      'edit',
+      { file_path: path, old_string: 'aaa', new_string: 'bbb' }
+    );
+    check('lock with a BOM: request reaches the bridge', r.payload !== null, true);
+    check('lock with a BOM: verdict applied', r.decision.kind, 'allow');
+    check('lock with a BOM: proposed bytes', r.payload.newContents, 'bbb\n');
+  }
+
+  // A lock file that is not JSON at all: nothing to route to, so no opinion - the harness
+  // handles the call exactly as if this plugin were not installed.
+  {
+    const path = fileWith('aaa\n');
+    const r = await reviewViaLock(() => 'not json at all', 'edit',
+      { file_path: path, old_string: 'aaa', new_string: 'bbb' });
+    check('unreadable lock: bridge not asked', r.payload, null);
+    check('unreadable lock: passes through', r.decision.kind, 'allow');
+  }
+}
 console.log('');
 if (failures === 0) {
   console.log(`All ${checks} checks passed.`);

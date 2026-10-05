@@ -147,6 +147,25 @@ every edit landed unreviewed. The plugin answers `ask` instead, handing the call
 harness's own permission flow. "I cannot show you this change" is not the same as "this
 change is fine".
 
+### The plugin can also be installed on its own
+
+`packages/dsh-plugin-vs-gate` declares a `dsh.bundle` manifest, so it installs with
+DeepSeek Harness's own command:
+
+```sh
+dsh plugin add github:VSworder/deepseek-harness-visual-studio#packages/dsh-plugin-vs-gate
+```
+
+That is for running DeepSeek Harness in your own terminal rather than through **Start
+session**. The window still comes from the extension — it is what owns the loopback bridge
+— so Visual Studio has to be open with the extension installed. Nothing needs the extension
+to have *launched* the session.
+
+With no Visual Studio reachable the plugin says nothing at all and the harness handles the
+call as if it were not installed. That is deliberate: prompting on every edit would be a
+worse outcome than staying quiet, for a plugin the user installed to make edits reviewable.
+A session the extension launched is the exception — there the variables are set, a window is
+expected, and a gate that cannot open one says so instead of writing unreviewed.
 ### Two problems still worth knowing about
 
 **1. An ambiguous edit is refused, not reviewed.** The harness rejects an `edit` whose
@@ -192,7 +211,8 @@ src/
   DeepSeekHarness.Setup/      locating dsh, generating the plugin mount and patch
   DeepSeekHarness.VS/         the VSIX: package, diff window, IDE tools, commands
   DeepSeekHarness.Vsix/       packaging
-  DeepSeekHarness.DshPlugin/  the gate plugin, embedded in the VSIX
+packages/
+  dsh-plugin-vs-gate/         the gate plugin: embedded in the VSIX, and installable on its own
 docs/
   protocol.md                 /permission contract
 tests/

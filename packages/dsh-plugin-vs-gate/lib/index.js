@@ -22,7 +22,8 @@
  * @module @deepseek-harness-vs/dsh-plugin-vs-gate
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { request } from 'node:http';
 
 /** Cordis plugin name, used by loader diagnostics. */
@@ -88,8 +89,16 @@ async function review(ctx, exec) {
 
 	if (exec.name === 'str_replace_editor' && READ_ONLY_COMMANDS.has(args.command)) return undefined;
 
-	const target = locateBridge(ctx);
-	if (target === undefined) return UNAVAILABLE;
+	const candidates = bridgeCandidates();
+	if (candidates.length === 0) {
+		// No Visual Studio is reachable. Mounted by the extension, this cannot happen; found
+		// through a lock file, it means no instance is open. Either way this plugin's whole
+		// job is to route a change to that window, and with no window there is nothing to
+		// say - so it says nothing and the harness decides, exactly as if it were not
+		// installed. Answering `ask` here would put a prompt in front of every edit for a
+		// plugin the user installed to review edits, which is worse than useless.
+		return undefined;
+	}
 
 	// Read the file the tool is about to change. Failure here is not fatal: a file that
 	// does not exist yet is the normal case for a create, and the proposal is still worth
@@ -106,25 +115,40 @@ async function review(ctx, exec) {
 		// This plugin cannot describe the change faithfully. Saying nothing and letting the
 		// harness ask is strictly better than showing a diff the reviewer might approve
 		// without seeing the real edit.
-		return UNAVAILABLE;
+		return undefined;
 	}
 
-	try {
-		const verdict = await ask(target, {
-			filePath,
-			currentContents: current,
-			newContents: proposed,
-			toolName: exec.name,
-			callId: exec.callId,
-			cwd: process.cwd()
-		}, exec.signal);
+	const payload = {
+		filePath,
+		currentContents: current,
+		newContents: proposed,
+		toolName: exec.name,
+		callId: exec.callId,
+		cwd: process.cwd()
+	};
 
-		if (verdict.accept === true) return { kind: 'allow' };
-		return { kind: 'deny', reason: verdict.reason || 'Rejected in the Visual Studio diff' };
-	} catch (error) {
-		ctx.logger?.warn?.(`vs-gate: review request failed: ${error?.message ?? error}`);
-		return UNAVAILABLE;
+	// Try each candidate until one answers. Discovery cannot test liveness without a
+	// request, so the request is the test: a lock file left by a closed Visual Studio
+	// simply fails and the next candidate is tried, and a lock file is therefore never
+	// worth deleting to stay correct.
+	let lastError;
+	for (const target of candidates) {
+		try {
+			const verdict = await ask(target, payload, exec.signal);
+			if (verdict.accept === true) return { kind: 'allow' };
+			return { kind: 'deny', reason: verdict.reason || 'Rejected in the Visual Studio diff' };
+		} catch (error) {
+			lastError = error;
+		}
 	}
+
+	ctx.logger?.warn?.(`vs-gate: review request failed: ${lastError?.message ?? lastError}`);
+
+	// Every candidate failed. What that means depends on who put this plugin here. The
+	// extension started this session expecting a window, so a user who asked for review and
+	// silently did not get one must be told - hence `ask`. A standalone install that found a
+	// Visual Studio and then lost it is back to "no window", which is not its business.
+	return candidates[0].expected === true ? UNAVAILABLE : undefined;
 }
 
 // --- the proposal ----------------------------------------------------------------
@@ -235,22 +259,107 @@ function applyInsert(current, insertLine, text) {
 	return restoreLineEndings(joined, crlf);
 }
 
-// --- the bridge ------------------------------------------------------------------
+// --- finding the bridge ----------------------------------------------------------
 
 /**
- * Where the Visual Studio bridge is listening, or undefined when it is not discoverable.
+ * Every bridge worth trying, best first. Empty means no Visual Studio is reachable.
  *
- * The extension injects the port and token when it starts the session, which is the case
- * that matters; holding them in the environment keeps discovery to one lookup and leaves
- * nothing on disk to go stale.
+ * Two ways in, and they exist for different reasons:
+ *
+ * - The environment, when the extension starts the session itself. That is the ordinary
+ *   path and it wins outright: the port and token were chosen for *this* session, so
+ *   falling back to a scanned lock file could route a change to a different Visual Studio
+ *   than the one the user is looking at, which is worse than failing.
+ * - The lock files the extension writes, when the plugin was installed on its own and
+ *   somebody started DeepSeek Harness themselves. Nothing here needs the extension to have
+ *   launched the session - only for Visual Studio to be open, because that is where the
+ *   window comes from.
  */
-function locateBridge(ctx) {
+function bridgeCandidates() {
 	const port = Number(process.env.DSH_VS_BRIDGE_PORT);
 	const token = process.env.DSH_VS_BRIDGE_TOKEN;
-	if (!Number.isInteger(port) || port <= 0 || typeof token !== 'string' || token.length === 0) {
-		return undefined;
+	if (Number.isInteger(port) && port > 0 && typeof token === 'string' && token.length > 0) {
+		return [{ port, token, expected: true }];
 	}
-	return { port, token };
+	return scanLockFiles();
+}
+
+/**
+ * Bridges advertised by lock files, ranked by how well their workspace matches this
+ * process's directory.
+ *
+ * Liveness is deliberately not checked here. Node cannot open a socket synchronously, and a
+ * failed request is the same evidence an explicit probe would produce - so the request *is*
+ * the probe, and the caller moves to the next candidate. That also means a lock file left
+ * behind by a Visual Studio that has since closed costs one refused connection and nothing
+ * else, which is why nothing needs to clean them up for this to stay correct.
+ */
+function scanLockFiles() {
+	const base = process.env.LOCALAPPDATA;
+	if (typeof base !== 'string' || base.length === 0) return [];
+
+	const directory = join(base, 'DeepSeekHarness', 'vs-bridge');
+	let names;
+	try {
+		names = readdirSync(directory).filter((entry) => entry.endsWith('.lock'));
+	} catch {
+		// No directory means the extension has never run here, which is the ordinary case
+		// for someone who installed this plugin on its own and has no Visual Studio open.
+		return [];
+	}
+
+	const cwd = normalise(process.cwd());
+	const found = [];
+	for (const entry of names) {
+		try {
+			// A leading byte-order mark is stripped before parsing. The extension writes
+			// these files without one, but anything else writing UTF-8 on Windows may add
+			// it - and JSON.parse rejects a BOM outright, which would make this plugin skip
+			// a perfectly good lock and silently route nothing.
+			const raw = readFileSync(join(directory, entry), 'utf8').replace(/^\uFEFF/, '');
+			const lock = JSON.parse(raw);
+			const port = Number(lock.port);
+			const token = lock.authToken;
+			if (!Number.isInteger(port) || port <= 0 || typeof token !== 'string' || token.length === 0) continue;
+			found.push({ port, token, expected: false, score: workspaceScore(lock.workspaceFolders, cwd) });
+		} catch {
+			// A lock file we cannot read is one we skip; it is not a reason to refuse to
+			// review anything else.
+		}
+	}
+
+	// Highest score first. Ties keep discovery order, which is fine: the first that answers
+	// is the one the user gets, and a second Visual Studio is a rare configuration.
+	return found.sort((left, right) => right.score - left.score);
+}
+
+/** Lower-case, forward-slashed, without a trailing separator, for comparison. */
+function normalise(value) {
+	return String(value).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+/**
+ * How well a lock's workspace folders match the session directory: exact beats enclosing
+ * beats enclosed, and anything unrelated scores zero.
+ *
+ * Contains rather than equality, because a session routinely runs in a subdirectory of the
+ * folder Visual Studio has open - and separator-aware, so `C:/work/app` does not match a
+ * sibling `C:/work/app-service`.
+ */
+function workspaceScore(folders, cwd) {
+	if (!Array.isArray(folders)) return 0;
+
+	let best = 0;
+	for (const folder of folders) {
+		if (typeof folder !== 'string') continue;
+		const workspace = normalise(folder);
+		if (workspace.length === 0) continue;
+
+		if (workspace === cwd) best = Math.max(best, 3);
+		else if (cwd.startsWith(workspace + '/')) best = Math.max(best, 2);
+		else if (workspace.startsWith(cwd + '/')) best = Math.max(best, 1);
+	}
+	return best;
 }
 
 /** Ask the extension to review one proposal and resolve to its verdict. */

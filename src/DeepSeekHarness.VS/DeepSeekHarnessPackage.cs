@@ -247,7 +247,39 @@ namespace DeepSeekHarness.VS
             }
         }
 
+        /// <summary>
+        /// Proposals already being reviewed, keyed by the harness call they belong to.
+        /// </summary>
+        /// <remarks>
+        /// The gate can be mounted twice - the extension mounts it, and a user may also have
+        /// installed the package into their DeepSeek Harness profile - in which case both
+        /// listeners intercept the same call and both post it here. Without this the reviewer
+        /// would be shown two diffs for one edit and the second verdict would be discarded.
+        /// </remarks>
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Task<PermissionDecision>> _reviewsInFlight =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, Task<PermissionDecision>>(StringComparer.Ordinal);
+
         private Task<PermissionDecision> OnPermissionRequestedAsync(PermissionRequest request)
+        {
+            // Only de-duplicate when the plugin told us which call this is. Without an id
+            // there is nothing to match on, and treating every anonymous proposal as the
+            // same one would silently drop real reviews.
+            if (string.IsNullOrEmpty(request.CallId)) return PresentAndWaitAsync(request);
+
+            // GetOrAdd, not TryAdd: a racing second request must join the first review rather
+            // than starting its own.
+            var shared = _reviewsInFlight.GetOrAdd(request.CallId, _ => PresentAndWaitAsync(request));
+
+            // Drop the entry once it settles, so a later call that happens to reuse the id
+            // (a new session, a restarted harness) is reviewed on its own merits.
+            shared.ContinueWith(
+                _ => { Task<PermissionDecision> removed; _reviewsInFlight.TryRemove(request.CallId, out removed); },
+                TaskScheduler.Default);
+
+            return shared;
+        }
+
+        private Task<PermissionDecision> PresentAndWaitAsync(PermissionRequest request)
         {
             // The HTTP handler runs on a thread-pool thread and may stay alive for hours,
             // but the diff must be presented on the UI thread. Bridge the two with a

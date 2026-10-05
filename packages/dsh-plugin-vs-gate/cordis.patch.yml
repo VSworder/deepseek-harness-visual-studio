@@ -1,0 +1,8 @@
+# Loader entries for this package.
+#
+# The bundle manifest in package.json points here, which is what makes the plugin
+# installable with `dsh plugin add`. The entry mounts this package by its own name, so the
+# host resolves it from the profile it was installed into.
+- insert:
+    - id: vs-gate
+      name: '@deepseek-harness-vs/dsh-plugin-vs-gate'

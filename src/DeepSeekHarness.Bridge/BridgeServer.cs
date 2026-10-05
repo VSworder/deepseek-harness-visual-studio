@@ -280,7 +280,8 @@ namespace DeepSeekHarness.Bridge
                 Cwd = ReadString(json, "cwd"),
                 PermissionMode = ReadString(json, "permissionMode"),
                 TranscriptPath = ReadString(json, "transcriptPath"),
-                Pid = ReadInt(json, "pid")
+                Pid = ReadInt(json, "pid"),
+                CallId = ReadString(json, "callId")
             };
         }
 
