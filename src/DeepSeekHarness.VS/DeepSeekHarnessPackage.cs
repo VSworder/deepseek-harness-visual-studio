@@ -394,9 +394,11 @@ namespace DeepSeekHarness.VS
 
                 var answer = VsShellUtilities.ShowMessageBox(this,
                     "Delete the files this extension installed?\n\n" + root +
-                    "\n\nThis removes the gate plugin, the bridge patch and the launcher.\n" +
-                    "Sessions started from that launcher stop being gated. Uninstalling the VSIX does NOT do this:\n" +
-                    "a VSIX uninstall cannot run code, so this command is the only way to remove them.",
+                    "\n\nCleanup only - you do not need this to stop using the extension.\n\n" +
+                    "Uninstalling it from Manage Extensions already removes every capability; what stays behind\n" +
+                    "is a plugin file, a launch script and this log, none of which run on their own.\n\n" +
+                    "Run this if you also want the folder gone. Sessions already started from the launch\n" +
+                    "script keep running, but stop being gated once the plugin is deleted.",
                     "DeepSeek Harness", OLEMSGICON.OLEMSGICON_WARNING,
                     OLEMSGBUTTON.OLEMSGBUTTON_YESNO, OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_SECOND);
 

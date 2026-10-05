@@ -3,8 +3,8 @@
 Bring **DeepSeek Harness** into Visual Studio:
 
 - **Native diff gate.** When the agent wants to change a file, the diff opens in Visual
-  Studio's own comparison window 閳?left is what is on disk, right is what the model
-  proposes 閳?with Accept and Reject. Nothing is written until you accept, and a rejection
+  Studio's own comparison window &#8212;?left is what is on disk, right is what the model
+  proposes &#8212;?with Accept and Reject. Nothing is written until you accept, and a rejection
   can carry an explanation that goes straight back to the model.
 - **Visual Studio tools for the agent.** The session gets MCP tools that read IDE state:
   which solution is open, which files are in the editor. The model stops guessing about
@@ -24,7 +24,7 @@ Early, but the core is verified end to end.
 | `get_environment`, `get_open_files` | Verified in a live agent session |
 | `get_current_selection` | Verified in a live session: with a selection, and with a bare caret |
 | Status command | Works |
-| Launching the session from Visual Studio | **Works.** Tools 鈫?DeepSeek Harness 鈫?Start session |
+| Launching the session from Visual Studio | **Works.** Tools -&gt;?DeepSeek Harness -&gt;?Start session |
 
 The tools the agent gets:
 
@@ -52,14 +52,15 @@ Adjust the path for your edition. Restart Visual Studio afterwards.
 
 ## Use
 
-Open a solution. The extension starts a loopback bridge and writes its gate plugin and a DSH
-patch under `%LOCALAPPDATA%\DeepSeekHarness\`.
+Open a solution, then:
 
-Check that the gate is armed:
+> **Tools — DeepSeek Harness — Start session**
 
-> **Tools 閳?DeepSeek Harness 閳?Status閳?*
+A terminal tab opens running DeepSeek Harness with the gate attached. In that session the
+agent can call the Visual Studio tools as `mcp__vs__*`, and every file edit it proposes opens
+in Visual Studio's diff window first.
 
-Then start a session with the patch attached:
+To run a session somewhere else, attach the same patch by hand:
 
 ```powershell
 dsh-tui --patch "$env:LOCALAPPDATA\DeepSeekHarness\vs-bridge\dsh-patch.yml"
@@ -68,8 +69,24 @@ dsh-tui --patch "$env:LOCALAPPDATA\DeepSeekHarness\vs-bridge\dsh-patch.yml"
 The patch is rewritten every time Visual Studio starts, because it carries the bridge's
 current port and token. The command stays the same.
 
-In that session, the agent can call the Visual Studio tools as `mcp__vs__*`.
+### The menu
 
+| Command | What it does |
+| --- | --- |
+| **Start session** | Opens a terminal tab running a gated session |
+| **Status...** | Reports whether the gate is armed, and what is missing when it is not |
+| **Open log** | Opens `%LOCALAPPDATA%\DeepSeekHarness\vs-extension.log` |
+| **Clean up installed files...** | Deletes the folder this extension writes to. **Optional** - see below |
+
+**About Clean up installed files:** you do not need it to stop using the extension.
+Uninstalling it from *Extensions -> Manage Extensions* already removes every capability: with
+no Visual Studio there is no bridge, sessions run ungated, and nothing on disk starts by
+itself. What remains is a plugin file, a launch script and a log - inert files in
+`%LOCALAPPDATA%\DeepSeekHarness\`.
+
+A VSIX uninstall cannot run code, so it cannot remove that folder for you. This command is
+the only way to delete it, and it is there for people who want the folder gone, not as a
+required step. It asks for confirmation and names the folder first.
 ## How it works
 
 ```
@@ -127,6 +144,20 @@ the reviewer is never shown a change that cannot happen.
 the extension's own directory and the patch mounts it from there. The harness configuration
 the user owns — approval policy, sandbox policy, profile dependencies — is not touched.
 
+## Testing
+
+[docs/testing.md](docs/testing.md) is the by-hand checklist: it covers the parts automated
+tests cannot, which are also the parts that have failed most quietly here - whether the
+harness mounts the gate at all, whether the diff window appears, and whether a rejection
+actually stops the write. Each step says what a failure looks like, because every failure
+this project hit looked like success from the outside.
+
+The automated suites:
+
+```powershell
+node tests/plugin-rebuild.test.mjs     # the proposal the gate builds: 21 checks
+node tests/mcp-sdk-test.mjs <port> <token>   # /mcp against the real MCP client library
+```
 ## Building
 
 Requires the **Visual Studio extension development** workload.

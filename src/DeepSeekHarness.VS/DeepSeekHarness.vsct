@@ -76,9 +76,9 @@
       <Button guid="guidDeepSeekHarnessCmdSet" id="cmdRemove" priority="0x0500" type="Button">
         <Parent guid="guidDeepSeekHarnessCmdSet" id="DeepSeekHarnessGroup" />
         <Strings>
-          <ButtonText>Remove everything…</ButtonText>
-          <CommandName>Remove everything</CommandName>
-          <ToolTipText>Delete the hook, its DeepSeek Harness config and this extension's files. Uninstalling the VSIX does not do this.</ToolTipText>
+          <ButtonText>Clean up installed files&#8230;</ButtonText>
+          <CommandName>Clean up installed files</CommandName>
+          <ToolTipText>Cleanup only: deletes the gate plugin, the launch script and the log under %LOCALAPPDATA%\DeepSeekHarness. Sessions started from the launch script stop being gated. You do not need this to uninstall - uninstalling the extension already removes all of its functionality, and what remains is inert files. Run this only if you want the folder gone as well.</ToolTipText>
         </Strings>
       </Button>
     </Buttons>
