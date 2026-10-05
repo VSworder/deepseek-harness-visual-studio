@@ -24,7 +24,7 @@ namespace DeepSeekHarness.VS
     ///
     /// Two wrong turns worth recording. The <c>CreateTerminalAsync</c> overload taking a
     /// <c>ProfileConfig</c> ignores a profile the service has not seen and falls back to the
-    /// shell's default — the tab takes the requested name and runs PowerShell. And the profile
+    /// shell's default 閳?the tab takes the requested name and runs PowerShell. And the profile
     /// has to be reachable under the overload taking an <see cref="ITerminalProfile"/>, which is
     /// why <c>AddCachedProfile</c> comes first.
     /// </remarks>
@@ -76,6 +76,35 @@ namespace DeepSeekHarness.VS
                 _log("could not register the terminal profile: " + ex.Message);
             }
 
+            // The window entry point is what honours the default profile; the overload taking
+            // a profile object is accepted but ignored, measured, so it is the fallback.
+            try
+            {
+                var id = await terminal.CreateTerminalWindowAsync(cancellationToken, null).ConfigureAwait(true);
+                _log("opened terminal window " + id);
+
+                // The profile only had to exist for that one selection. Withdrawing it keeps
+                // the promise that this extension adds nothing lasting: otherwise the user's
+                // own "new terminal" would keep opening DeepSeek Harness until a restart.
+                // The running terminal owns its pty already, so removing the cached entry
+                // does not disturb it.
+                try
+                {
+                    terminal.RemoveCachedProfile(profile);
+                    _log("withdrew the cached profile; the running session is unaffected");
+                }
+                catch (Exception ex)
+                {
+                    _log("could not withdraw the cached profile: " + ex.Message);
+                }
+
+                return id;
+            }
+            catch (Exception ex)
+            {
+                _log("CreateTerminalWindowAsync failed: " + ex);
+            }
+
             try
             {
                 var id = await terminal.CreateTerminalAsync(
@@ -84,26 +113,12 @@ namespace DeepSeekHarness.VS
                     profile: (ITerminalProfile)profile,
                     workingDirectory: workingDirectory).ConfigureAwait(true);
 
-                _log("launched session in VS terminal " + id + " via profile '" + ProfileName + "'");
+                _log("fell back to CreateTerminalAsync; opened terminal " + id);
                 return id;
             }
             catch (Exception ex)
             {
-                _log("CreateTerminalAsync with a profile failed: " + ex);
-            }
-
-            // Fall back to the window entry point: it opens a terminal the user can pick the
-            // profile in. Worse than launching, far better than nothing, and honest in the log.
-            try
-            {
-                var id = await terminal.CreateTerminalWindowAsync(cancellationToken, null).ConfigureAwait(true);
-                _log("opened a plain terminal window (" + id + "); pick the '" + ProfileName +
-                     "' profile from the terminal dropdown to run the session");
-                return id;
-            }
-            catch (Exception ex)
-            {
-                _log("could not open a terminal window either: " + ex);
+                _log("could not start a terminal at all: " + ex);
                 return null;
             }
         }
@@ -123,7 +138,13 @@ namespace DeepSeekHarness.VS
                 displayName: ProfileName,
                 location: "cmd.exe",
                 arguments: "/k \"" + scriptPath + "\"",
-                isDefault: false);
+                // isDefault must be true. A non-default profile is exactly what the
+                // terminal service refuses to select on its own - which is why the first
+                // attempt opened a tab named "DeepSeek Harness" running PowerShell while
+                // picking the same profile from the dropdown worked. The cache is
+                // process-lifetime only, so this changes nothing after Visual Studio
+                // restarts, and it is the price of the service choosing our profile.
+                isDefault: true);
 
             config.Id = ProfileId;
             return config;
