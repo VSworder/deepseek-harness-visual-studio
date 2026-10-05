@@ -1,3 +1,5 @@
+English | [中文](README.zh.md)
+
 # DeepSeek Harness for Visual Studio
 
 Bring **DeepSeek Harness** (dsh) into Visual Studio:
@@ -119,7 +121,7 @@ loopback endpoint and registers itself with `dsh-mcp-client`.
 
 ### The gate is a plugin this repository owns
 
-`src/DeepSeekHarness.DshPlugin` is a DeepSeek Harness plugin. The extension embeds it in the
+`packages/dsh-plugin-vs-gate` is a DeepSeek Harness plugin. The extension embeds it in the
 VSIX, writes it under `%LOCALAPPDATA%\DeepSeekHarness\dsh-plugin`, and mounts it from the
 generated patch.
 
@@ -188,7 +190,7 @@ this project hit looked like success from the outside.
 The automated suites:
 
 ```powershell
-node tests/plugin-rebuild.test.mjs     # the proposal the gate builds: 21 checks
+node tests/plugin-rebuild.test.mjs     # the proposal the gate builds: 26 checks
 node tests/mcp-sdk-test.mjs <port> <token>   # /mcp against the real MCP client library
 ```
 ## Building
